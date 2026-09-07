@@ -23,6 +23,18 @@ python app.py
 
 Ouvrir [http://localhost:5000](http://localhost:5000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
 
+## Dashboard React (optionnel)
+
+En plus du frontend minimal ci-dessus, un dashboard React plus complet existe dans [frontend/](frontend/) — préparé pour les fonctionnalités des paliers suivants (upload de corpus, panneau d'audit de quarantaine), pour l'instant désactivées côté UI tant que le backend ne les expose pas.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Ouvrir [http://localhost:5173](http://localhost:5173) (le backend Flask doit tourner en parallèle sur le port 5000 — un proxy Vite relaie `/api` vers `http://localhost:5000`).
+
 ## Architecture (palier 2 — socle)
 
 ```text
@@ -45,7 +57,7 @@ Pas de base de données, pas de Docker : un seul process Python sert à la fois 
 ## Choix retenus / écartés
 
 - **Flask plutôt que FastAPI** : un seul fichier, zéro configuration ASGI, suffisant pour une route.
-- **Frontend statique vanilla JS plutôt que React/Vite** : aucune étape de build, aucune dépendance Node — réduit le risque d'échec du quickstart sur une machine inconnue.
+- **Frontend statique vanilla JS comme socle du quickstart** : aucune étape de build, aucune dépendance Node — réduit le risque d'échec du quickstart sur une machine inconnue. Le dashboard React (`frontend/`) est un second frontend, optionnel, préparé pour l'interface cible du projet.
 - **Pas de Docker** : ajoute une dépendance (le démon Docker) et du temps de build pour un bénéfice nul à ce stade ; un `venv` Python suffit.
 
 ## Limites connues (palier 2)
