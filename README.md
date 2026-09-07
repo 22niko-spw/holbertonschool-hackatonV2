@@ -60,7 +60,7 @@ Un seul process Python sert à la fois le frontend buildé et la route API — p
 ## Choix retenus / écartés
 
 - **Flask plutôt que FastAPI** : un seul fichier, zéro configuration ASGI, suffisant pour une route.
-- **Flask sert le build React (`frontend/dist`) plutôt que `static/index.html`** : un seul serveur pour l'expérience complète en démo. Contrepartie assumée : Node/npm redevient un prérequis du quickstart (`npm run build` avant `python app.py`), alors que le socle initial de Kévin visait à l'éviter — `static/index.html` reste dans le dépôt comme repli minimal Python-only si besoin.
+- **Flask sert le build React (`frontend/dist`) plutôt que `static/index.html`** : un seul serveur pour l'expérience complète en démo. Contrepartie assumée : Node/npm redevient un prérequis du quickstart (`npm run build` avant `python app.py`), alors que le socle initial de Kévin visait à l'éviter. `static/index.html` reste dans le dépôt mais n'est plus servi par Flask — c'est le frontend minimal du socle initial, superseded, pas un fallback actif.
 - **Pas de Docker** : ajoute une dépendance (le démon Docker) et du temps de build pour un bénéfice nul à ce stade ; un `venv` Python suffit.
 
 ## Limites connues (palier 2)
