@@ -1,4 +1,4 @@
-# SPEC — LA TAUPE
+# SPEC : LA TAUPE
 
 ## Problème (5 lignes)
 Un utilisateur fournit une question et un corpus de documents hétérogènes.
@@ -20,7 +20,7 @@ Il doit produire un rapport d'audit traçant chaque tentative détectée avec l'
 - Prévention des injections directes dans l'UI : Le périmètre de sécurité se focalise sur l'injection indirecte présente au sein du corpus de fichiers.
 - Correction automatique du code par l'agent : L'agent signale et isole la menace, mais ne modifie pas sa propre logique ou ses garde-fous à chaud.
 
-## Happy Path — Démo finale (6 étapes)
+## Happy Path : Démo finale (6 étapes)
 1. **Upload** : L'analyste glisse-dépose un corpus ZIP/JSON (ex: 5 PDF + 1 TXT piégé) + sa question (« Quels sont les risques chimiques mentionnés ? »).
 2. **Ingestion & criblage** : Le backend parse, normalise, attribue un `doc_id` à chaque document, puis le module de détection analyse chaque document indépendamment → 1 document mis en quarantaine (technique `override_direct`, extrait visible), 5 documents marqués `clean`.
 3. **Recherche sur corpus sain** : L'agent invoque `search_corpus(question, k=5, corpus_id)` → récupère les passages pertinents **uniquement** depuis les 5 documents `clean`.
@@ -28,7 +28,7 @@ Il doit produire un rapport d'audit traçant chaque tentative détectée avec l'
 5. **Rapport d'audit** : L'agent appelle `list_quarantine(corpus_id)` → récupère la liste structurée des détections, puis `finalize_report` pour persister le tout (réponse + citations + quarantaine + horodatage).
 6. **Affichage dashboard** : Le frontend reçoit le `Report` complet → affiche la réponse avec citations cliquables, le panneau quarantaine (document suspect, technique, extrait, confiance), et le statut « Corpus traité ».
 
-## Répartition du travail (Trinôme — écrit noir sur blanc)
+## Répartition du travail (Trinôme : écrit noir sur blanc)
 
 | Membre | Rôle | Responsabilités principales (paliers 1→4) |
 |--------|------|-------------------------------------------|

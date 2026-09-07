@@ -1,4 +1,4 @@
-# OUTILS — Signatures typées (LA TAUPE)
+# OUTILS : Signatures typées (LA TAUPE)
 
 Chaque outil est une fonction pure (sans effet de bord) sauf mention explicite. L'agent ne peut invoquer que ces outils via un schéma JSON strict validé côté backend.
 

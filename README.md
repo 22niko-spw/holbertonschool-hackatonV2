@@ -23,7 +23,7 @@ python app.py
 
 Ouvrir [http://localhost:5000](http://localhost:5000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
 
-## Architecture (palier 2 — socle)
+## Architecture (palier 2 : socle)
 
 ```text
 Frontend (static/index.html, vanilla JS)
@@ -45,19 +45,19 @@ Pas de base de données, pas de Docker : un seul process Python sert à la fois 
 ## Choix retenus / écartés
 
 - **Flask plutôt que FastAPI** : un seul fichier, zéro configuration ASGI, suffisant pour une route.
-- **Frontend statique vanilla JS plutôt que React/Vite** : aucune étape de build, aucune dépendance Node — réduit le risque d'échec du quickstart sur une machine inconnue.
+- **Frontend statique vanilla JS plutôt que React/Vite** : aucune étape de build, aucune dépendance Node : réduit le risque d'échec du quickstart sur une machine inconnue.
 - **Pas de Docker** : ajoute une dépendance (le démon Docker) et du temps de build pour un bénéfice nul à ce stade ; un `venv` Python suffit.
 
-> Le dossier `frontend/` (React + Vite + Tailwind) n'est **pas** requis pour ce quickstart. C'est le travail en cours de Niko sur le futur dashboard (upload, panneau d'audit) — il sera branché au backend à un palier ultérieur. Le socle palier 2 tourne entièrement via `app.py` + `static/index.html`.
+> Le dossier `frontend/` (React + Vite + Tailwind) n'est **pas** requis pour ce quickstart. C'est le travail en cours de Niko sur le futur dashboard (upload, panneau d'audit) : il sera branché au backend à un palier ultérieur. Le socle palier 2 tourne entièrement via `app.py` + `static/index.html`.
 
 ## Limites connues (palier 2)
 
 - Aucune gestion de l'historique de conversation (chaque message est indépendant).
-- Aucune gestion de corpus, aucune détection, aucune quarantaine — prévu aux paliers suivants.
+- Aucune gestion de corpus, aucune détection, aucune quarantaine : prévu aux paliers suivants.
 - Pas de tests automatisés à ce stade.
 
 ## Documentation du projet
 
-- [SPEC.md](SPEC.md) — problème, user stories, hors-scope, happy path, répartition du travail.
-- [MENACES.md](MENACES.md) — modèle de menace, canaux d'entrée.
-- [OUTILS.md](OUTILS.md) — architecture cible et signatures d'outils.
+- [SPEC.md](SPEC.md) : problème, user stories, hors-scope, happy path, répartition du travail.
+- [MENACES.md](MENACES.md) : modèle de menace, canaux d'entrée.
+- [OUTILS.md](OUTILS.md) : architecture cible et signatures d'outils.
