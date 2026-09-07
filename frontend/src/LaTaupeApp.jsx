@@ -23,6 +23,7 @@ import {
   Loader2,
   ArrowUp,
   Undo2,
+  X,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -110,6 +111,12 @@ const TOKENS = {
 
 const ThemeContext = createContext(TOKENS.dark);
 const useT = () => useContext(ThemeContext);
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // ---------------------------------------------------------------------------
 // Small building blocks
@@ -236,7 +243,25 @@ function Dropzone({ onFiles, big, disabled }) {
 // HOME PAGE
 // ---------------------------------------------------------------------------
 
-function HomePage({ dark, setDark, question, setQuestion, onLaunch, launching }) {
+function StagedChip({ entry, onRemove }) {
+  const T = useT();
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1 text-[12px] ${T.chip}`}>
+      <FileText size={12} className={T.textFaint} />
+      <span className={`font-mono max-w-[160px] truncate ${T.textSecondary}`}>{entry.file.name}</span>
+      <span className={T.textFainter}>{formatBytes(entry.file.size)}</span>
+      <button
+        onClick={() => onRemove(entry.id)}
+        className={`flex h-4 w-4 items-center justify-center rounded-full ${T.hoverBg} ${T.textFaint}`}
+        aria-label={`Remove ${entry.file.name}`}
+      >
+        <X size={11} />
+      </button>
+    </span>
+  );
+}
+
+function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, setQuestion, onLaunch, launching }) {
   const T = useT();
 
   const canLaunch = question.trim().length > 0 && !launching;
@@ -284,12 +309,21 @@ function HomePage({ dark, setDark, question, setQuestion, onLaunch, launching })
           Pose ta question à La Taupe
         </h2>
         <p className={`mt-2 mb-8 text-center text-[13.5px] leading-relaxed ${T.textMuted}`}>
-          Socle du Palier 2 : ta question part vers un vrai modèle. L'analyse
-          de corpus et l'isolation des documents piégés arrivent aux paliers suivants.
+          Socle du Palier 2 : ta question part vers un vrai modèle. Les fichiers
+          déposés ci-dessous sont stagés visuellement — leur analyse (détection
+          d'injection, quarantaine) arrive aux paliers suivants.
         </p>
 
         <div className="w-full space-y-3">
-          <Dropzone big disabled />
+          <Dropzone big onFiles={addStaged} />
+
+          {staged.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {staged.map((entry) => (
+                <StagedChip key={entry.id} entry={entry} onRemove={removeStaged} />
+              ))}
+            </div>
+          )}
 
           <div className={`rounded-xl border transition-colors ${T.card} ${T.composerFocus}`}>
             <textarea
@@ -302,7 +336,9 @@ function HomePage({ dark, setDark, question, setQuestion, onLaunch, launching })
             />
             <div className="flex items-center justify-between px-3.5 pb-2.5 pt-1">
               <span className={`text-[11px] ${T.textFainter}`}>
-                Réponse générée par un vrai appel au modèle — aucune analyse de corpus à ce stade
+                {staged.length > 0
+                  ? `${staged.length} fichier${staged.length > 1 ? "s" : ""} stagé${staged.length > 1 ? "s" : ""} — pas encore envoyé au backend`
+                  : "Réponse générée par un vrai appel au modèle — aucune analyse de corpus à ce stade"}
               </span>
               <button
                 onClick={onLaunch}
@@ -739,9 +775,22 @@ export default function LaTaupeApp() {
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [staged, setStaged] = useState([]);
 
   // No corpus ingestion yet — docs stays empty until a real /ingest route exists.
   const docs = [];
+
+  const addStaged = useCallback((fileList) => {
+    const entries = Array.from(fileList).map((file) => ({
+      id: `stg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      file,
+    }));
+    setStaged((prev) => [...prev, ...entries]);
+  }, []);
+
+  const removeStaged = useCallback((id) => {
+    setStaged((prev) => prev.filter((e) => e.id !== id));
+  }, []);
 
   const launchAnalysis = async () => {
     const trimmed = question.trim();
@@ -751,6 +800,7 @@ export default function LaTaupeApp() {
     setAnswer("");
     setError("");
     setLoading(true);
+    setStaged([]);
     setView("dashboard");
 
     try {
@@ -774,6 +824,7 @@ export default function LaTaupeApp() {
     setAskedQuestion("");
     setAnswer("");
     setError("");
+    setStaged([]);
     setView("home");
   };
 
@@ -783,6 +834,9 @@ export default function LaTaupeApp() {
         <HomePage
           dark={dark}
           setDark={setDark}
+          staged={staged}
+          addStaged={addStaged}
+          removeStaged={removeStaged}
           question={question}
           setQuestion={setQuestion}
           onLaunch={launchAnalysis}
