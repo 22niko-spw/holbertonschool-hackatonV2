@@ -21,7 +21,7 @@ cp .env.example .env
 python app.py
 ```
 
-Ouvrir [http://localhost:5000](http://localhost:5000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
+Ouvrir [http://localhost:8000](http://localhost:8000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
 
 ## Dashboard React (optionnel)
 
@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-Ouvrir [http://localhost:5173](http://localhost:5173) (le backend Flask doit tourner en parallèle sur le port 5000 — un proxy Vite relaie `/api` vers `http://localhost:5000`).
+Ouvrir [http://localhost:5000](http://localhost:5000) (le backend Flask doit tourner en parallèle sur le port 8000 — un proxy Vite relaie `/api` vers `http://localhost:8000`).
 
 ## Architecture (palier 2 — socle)
 
