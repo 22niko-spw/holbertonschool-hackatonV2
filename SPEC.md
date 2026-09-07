@@ -1,7 +1,11 @@
 # SPEC — LA TAUPE
 
 ## Problème (5 lignes)
-Un utilisateur fournit une question et un corpus de documents. Certains documents contiennent des instructions cachées destinées à manipuler l'agent (injection de prompt indirecte). L'agent doit répondre correctement en n'utilisant que les documents légitimes, détecter et mettre en quarantaine les documents piégés, et produire un rapport d'audit traçant chaque tentative détectée avec l'extrait déclencheur.
+Un utilisateur fournit une question et un corpus de documents hétérogènes.
+Certains documents contiennent des instructions cachées destinées à manipuler l'agent (injection de prompt indirecte).
+L'agent doit produire une réponse correcte en n'utilisant que les documents légitimes.
+Il doit détecter et mettre en quarantaine les documents piégés.
+Il doit produire un rapport d'audit traçant chaque tentative détectée avec l'extrait déclencheur.
 
 ## User Stories
 1. **En tant qu'analyste**, je dépose un corpus mixte (documents sains + au moins un piégé) et je reçois une réponse fondée uniquement sur les documents sains, avec un rapport listant chaque document suspect, l'extrait incriminé et la technique détectée.
