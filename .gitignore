@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+
+# Logs
+*.log
+
+# Build artifacts
+*.o
+*.out
