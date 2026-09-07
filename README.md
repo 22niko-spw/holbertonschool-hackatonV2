@@ -48,6 +48,8 @@ Pas de base de données, pas de Docker : un seul process Python sert à la fois 
 - **Frontend statique vanilla JS plutôt que React/Vite** : aucune étape de build, aucune dépendance Node — réduit le risque d'échec du quickstart sur une machine inconnue.
 - **Pas de Docker** : ajoute une dépendance (le démon Docker) et du temps de build pour un bénéfice nul à ce stade ; un `venv` Python suffit.
 
+> Le dossier `frontend/` (React + Vite + Tailwind) n'est **pas** requis pour ce quickstart. C'est le travail en cours de Niko sur le futur dashboard (upload, panneau d'audit) — il sera branché au backend à un palier ultérieur. Le socle palier 2 tourne entièrement via `app.py` + `static/index.html`.
+
 ## Limites connues (palier 2)
 
 - Aucune gestion de l'historique de conversation (chaque message est indépendant).
