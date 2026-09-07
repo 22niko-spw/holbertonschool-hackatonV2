@@ -1,8 +1,8 @@
-# LA TAUPE — Moteur Agentique & Sécurité (Yo)
+# René LA TAUPE — Moteur Agentique & Sécurité (Yo)
 
-from la_taupe_agent.agent import AgentConfig, TaupeAgent, create_test_agent
-from la_taupe_agent.detection import DetectionAttempt, DetectionResult, InjectionDetector
-from la_taupe_agent.schemas import (
+from rene_la_taupe.agent import AgentConfig, ReneLaTaupeAgent, create_test_agent
+from rene_la_taupe.detection import DetectionAttempt, DetectionResult, InjectionDetector
+from rene_la_taupe.schemas import (
     Citation,
     CitedAnswer,
     DocHit,
@@ -10,7 +10,7 @@ from la_taupe_agent.schemas import (
     QuarantineEntry,
     Report,
 )
-from la_taupe_agent.tools import (
+from rene_la_taupe.tools import (
     CorpusStore,
     InMemoryCorpusStore,
     InMemoryReportStore,
@@ -25,7 +25,7 @@ from la_taupe_agent.tools import (
 
 __all__ = [
     # Agent
-    "TaupeAgent",
+    "ReneLaTaupeAgent",
     "AgentConfig",
     "create_test_agent",
     # Tools

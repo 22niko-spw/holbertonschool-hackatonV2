@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""CLI de test pour le moteur agentique LA TAUPE (Yo)."""
+"""CLI de test pour le moteur agentique René LA TAUPE (Yo)."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ import sys
 
 from dotenv import load_dotenv
 
-from la_taupe_agent import create_test_agent
-from la_taupe_agent.detection import InjectionDetector
-from la_taupe_agent.schemas import QuarantineEntry
-from la_taupe_agent.tools import CorpusStore
+from rene_la_taupe import create_test_agent
+from rene_la_taupe.detection import InjectionDetector
+from rene_la_taupe.schemas import QuarantineEntry
+from rene_la_taupe.tools import CorpusStore
 
 
 def load_env() -> None:
     load_dotenv()
-    if not os.getenv("OPENAI_API_KEY"):
-        print("ERREUR: OPENAI_API_KEY manquant. Copiez .env.example vers .env et remplissez-le.", file=sys.stderr)
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        print("ERREUR: ANTHROPIC_API_KEY manquant. Copiez .env.example vers .env et remplissez-le.", file=sys.stderr)
         sys.exit(1)
 
 
@@ -95,8 +95,8 @@ def build_test_corpus(store: CorpusStore, corpus_id: str) -> None:
 def test_detection() -> None:
     """Teste le détecteur d'injection standalone."""
     load_env()
-    from openai import OpenAI
-    llm = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    import anthropic
+    llm = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     detector = InjectionDetector(llm)
 
     test_cases = [
@@ -140,7 +140,7 @@ def test_agent(corpus_id: str, question: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Test LA TAUPE Agent (Yo)")
+    parser = argparse.ArgumentParser(description="Test René LA TAUPE Agent (Yo)")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("detection", help="Tester le détecteur d'injection")

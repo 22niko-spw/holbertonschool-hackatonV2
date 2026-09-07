@@ -1,4 +1,4 @@
-# Moteur agentique — LA TAUPE (Yo)
+# Moteur agentique — René LA TAUPE (Yo)
 # Boucle de décision LLM avec outils typés et étanchéité données/instructions.
 
 from __future__ import annotations
@@ -6,12 +6,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from openai import OpenAI
-from openai.types.chat import ChatCompletionMessageParam
+import anthropic
 
-from la_taupe_agent.prompts import ANSWER_GENERATION_PROMPT, SYSTEM_PROMPT
-from la_taupe_agent.schemas import CitedAnswer, DocHit, Report
-from la_taupe_agent.tools import (
+from rene_la_taupe.prompts import ANSWER_GENERATION_PROMPT, SYSTEM_PROMPT
+from rene_la_taupe.schemas import CitedAnswer, DocHit, Report
+from rene_la_taupe.tools import (
     CorpusStore,
     ReportStore,
     cite_sources,
@@ -25,12 +24,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentConfig:
-    model: str = "gpt-4o-mini"
+    model: str = "claude-3-5-haiku-20241022"
     temperature: float = 0.0
     max_search_results: int = 5
+    max_tokens: int = 1500
 
 
-class TaupeAgent:
+class ReneLaTaupeAgent:
     """
     Agent principal qui orchestre :
     1. Recherche dans le corpus sain
@@ -41,7 +41,7 @@ class TaupeAgent:
 
     def __init__(
         self,
-        llm_client: OpenAI,
+        llm_client: anthropic.Anthropic,
         corpus_store: CorpusStore,
         report_store: ReportStore,
         config: AgentConfig | None = None,
@@ -88,41 +88,42 @@ class TaupeAgent:
             for h in hits
         )
 
-        messages: list[ChatCompletionMessageParam] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": ANSWER_GENERATION_PROMPT.format(
-                question=question,
-                hits=hits_text,
-            )},
-        ]
-
-        response = self.llm.chat.completions.create(
+        response = self.llm.messages.create(
             model=self.config.model,
-            messages=messages,
-            temperature=self.config.temperature,
-            max_tokens=1500,
+            max_tokens=self.config.max_tokens,
+            system=SYSTEM_PROMPT,
+            messages=[
+                {"role": "user", "content": ANSWER_GENERATION_PROMPT.format(
+                    question=question,
+                    hits=hits_text,
+                )}
+            ],
         )
-        content = response.choices[0].message.content
-        return content.strip() if content else ""
+        # Anthropic response: content is a list of blocks, extract text from TextBlock
+        text_parts = []
+        for block in response.content:
+            if hasattr(block, "text"):
+                text_parts.append(block.text)
+        return "".join(text_parts).strip()
 
 
 # ─── Fonction helper pour test standalone ───
 
-def create_test_agent() -> TaupeAgent:
+def create_test_agent() -> ReneLaTaupeAgent:
     """Crée un agent avec stores en mémoire pour tests locaux."""
     import os
 
     from dotenv import load_dotenv
 
-    from la_taupe_agent.tools import InMemoryCorpusStore, InMemoryReportStore
+    from rene_la_taupe.tools import InMemoryCorpusStore, InMemoryReportStore
 
     load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY manquant dans .env")
+        raise RuntimeError("ANTHROPIC_API_KEY manquant dans .env")
 
-    llm = OpenAI(api_key=api_key)
+    llm = anthropic.Anthropic(api_key=api_key)
     corpus_store = InMemoryCorpusStore()
     report_store = InMemoryReportStore()
 
-    return TaupeAgent(llm, corpus_store, report_store)
+    return ReneLaTaupeAgent(llm, corpus_store, report_store)

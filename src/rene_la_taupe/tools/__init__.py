@@ -1,4 +1,4 @@
-# Outils typés pour l'agent LA TAUPE — Yo
+# Outils typés pour l'agent René LA TAUPE — Yo
 # Implémentations minimales (in-memory) pour Palier 2.
 # Le backend réel (Kévin) fournira les implémentations persistantes.
 
@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
-from la_taupe_agent.schemas import CitedAnswer, DocHit, DocMeta, QuarantineEntry, Report
+from rene_la_taupe.schemas import CitedAnswer, DocHit, DocMeta, QuarantineEntry, Report
 
 
 class CorpusStore(ABC):
@@ -135,7 +135,7 @@ def cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer:
     Attache les citations aux segments de la réponse.
     Version simplifiée : associe chaque hit à une citation span approximative.
     """
-    from la_taupe_agent.schemas import Citation
+    from rene_la_taupe.schemas import Citation
 
     citations = []
     for i, hit in enumerate(hits):

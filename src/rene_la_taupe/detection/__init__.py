@@ -1,4 +1,4 @@
-# Barrière de détection d'injection — LA TAUPE (Yo)
+# Barrière de détection d'injection — René LA TAUPE (Yo)
 # Version minimale Palier 2 : détection par LLM-juge avec prompt structuré.
 # Remplace plus tard par classifier dédié + règles déterministes.
 
@@ -10,8 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from la_taupe_agent.prompts import DETECTION_SYSTEM_PROMPT
-from la_taupe_agent.schemas import QuarantineEntry
+from rene_la_taupe.prompts import DETECTION_SYSTEM_PROMPT
+from rene_la_taupe.schemas import QuarantineEntry
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class InjectionDetector:
     Utilise un LLM-juge avec prompt système strict pour analyser un document.
     """
 
-    def __init__(self, llm_client: Any, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, llm_client: Any, model: str = "claude-3-5-haiku-20241022") -> None:
         self.llm = llm_client
         self.model = model
 
@@ -61,20 +61,17 @@ class InjectionDetector:
             third = max_chars // 3
             text = text[:third] + "\n...\n" + text[len(text)//2 - third//2 : len(text)//2 + third//2] + "\n...\n" + text[-third:]
 
-        messages = [
-            {"role": "system", "content": DETECTION_SYSTEM_PROMPT},
-            {"role": "user", "content": f"DOCUMENT ID: {doc_id}\n\nCONTENU:\n{text}\n\nAnalyse ce document et retourne UNIQUEMENT le JSON de détection."},
-        ]
-
         try:
-            response = self.llm.chat.completions.create(
+            response = self.llm.messages.create(
                 model=self.model,
-                messages=messages,
-                temperature=0.0,
-                response_format={"type": "json_object"},
                 max_tokens=1000,
+                temperature=0.0,
+                system=DETECTION_SYSTEM_PROMPT,
+                messages=[
+                    {"role": "user", "content": f"DOCUMENT ID: {doc_id}\n\nCONTENU:\n{text}\n\nAnalyse ce document et retourne UNIQUEMENT le JSON de détection."}
+                ],
             )
-            content = response.choices[0].message.content
+            content = response.content[0].text if response.content else "{}"
             data = json.loads(content)
             result = DetectionResult(**data)
             logger.info(f"Détection doc={doc_id} suspect={result.suspect} confidence={result.confidence} attempts={len(result.attempts)}")

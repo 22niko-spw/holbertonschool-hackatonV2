@@ -1,4 +1,4 @@
-# LA TAUPE — Palier 2 (Yo: Moteur Agentique & Sécurité)
+# René LA TAUPE — Palier 2 (Yo: Moteur Agentique & Sécurité)
 
 ## Quickstart (≤ 5 min)
 
@@ -13,7 +13,7 @@ pip install -e ".[dev]"
 
 # 3. Configurer .env
 cp .env.example .env
-# Éditer .env et mettre votre OPENAI_API_KEY
+# Éditer .env et mettre votre ANTHROPIC_API_KEY
 
 # 4. Tester le détecteur d'injection
 python -m scripts.test_agent detection
@@ -25,7 +25,7 @@ python -m scripts.test_agent agent --question "Quels sont les risques chimiques 
 ## Structure (Yo)
 
 ```
-src/la_taupe_agent/
+src/rene_la_taupe/
 ├── agent.py           # Boucle de décision LLM (moteur principal)
 ├── detection/         # Barrière détection injection (LLM-juge)
 ├── prompts/           # Prompts système avec séparation données/instructions
@@ -35,7 +35,7 @@ src/la_taupe_agent/
 
 ## Rôle de Yo (Palier 2)
 
-- **Moteur agentique** : `TaupeAgent.run(corpus_id, question)` → `Report`
+- **Moteur agentique** : `ReneLaTaupeAgent.run(corpus_id, question)` → `Report`
 - **6 outils typés** : signatures conformes à `OUTILS.md`
 - **Détection injection** : `InjectionDetector.analyze(doc_id, text)` → `DetectionResult`
 - **Prompts système** : séparation stricte données vs instructions
@@ -43,9 +43,9 @@ src/la_taupe_agent/
 
 ## Dépendances externes
 
-- `OPENAI_API_KEY` dans `.env` (obligatoire)
+- `ANTHROPIC_API_KEY` dans `.env` (obligatoire)
 - Backend (Kévin) : fournira `CorpusStore` et `ReportStore` persistants
-- Frontend (Niko) : appellera l'API qui utilise `TaupeAgent`
+- Frontend (Niko) : appellera l'API qui utilise `ReneLaTaupeAgent`
 
 ## Happy Path (6 étapes)
 
