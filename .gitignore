@@ -47,3 +47,7 @@ logs/
 
 # Test outputs
 report_test.json
+
+# Données locales (backend)
+*.db
+*.sqlite3

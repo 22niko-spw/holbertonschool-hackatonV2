@@ -1,120 +1,63 @@
 # LA TAUPE
 
-Agent IA qui répond à une question à partir d'un corpus documentaire, en détectant et isolant les tentatives d'injection de prompt cachées dans les documents avant qu'elles n'influencent la réponse.
+Agent capable d'analyser un corpus de documents dont certains peuvent contenir des tentatives d'injection de prompt. Voir [SPEC.md](SPEC.md) pour le cadrage complet et [MENACES.md](MENACES.md) pour le modèle de menace.
 
-**Statut actuel (Palier 2)** : deux briques existent en parallèle, pas encore branchées ensemble —
-- l'**app web** (Kévin + Niko) : une question part vers un vrai modèle Claude et la réponse s'affiche dans le dashboard.
-- le **moteur agentique** (Yo) : outils typés, détection d'injection, boucle de décision — testable en standalone, pas encore relié à l'app web (attend un corpus/store persistant côté backend).
+## Quickstart (< 5 min)
 
-## Quickstart — App web (≤ 5 min)
-
-Prérequis : Python 3.10+, Node.js 18+, une clé API Anthropic.
+Prérequis : Python 3.10+, une clé API Anthropic.
 
 ```bash
 git clone https://github.com/22niko-spw/holbertonschool-hackatonV2.git
 cd holbertonschool-hackatonV2
 
+python3 -m venv venv
+source venv/bin/activate        # Windows : venv\Scripts\activate
+
+pip install -r requirements.txt
+
 cp .env.example .env
 # éditer .env et coller votre ANTHROPIC_API_KEY
-
-cd frontend && npm install && npm run build && cd ..
-
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
 
 python app.py
 ```
 
-Ouvrir [http://localhost:8000](http://localhost:8000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
+Ouvrir [http://localhost:5000](http://localhost:5000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
 
-## Quickstart — Moteur agentique standalone (Yo)
+## Backend (Kévin)
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+Routes exposées par `app.py` :
 
-cp .env.example .env
-# éditer .env et mettre votre ANTHROPIC_API_KEY
-
-# Tester le détecteur d'injection
-python -m scripts.test_agent detection
-
-# Tester l'agent complet
-python -m scripts.test_agent agent --question "Quels sont les risques chimiques ?"
-```
-
-## Architecture
+- `POST /api/ask` : question libre → réponse LLM directe (socle palier 2).
+- `POST /ingest` : upload multipart de documents (PDF/DOCX/TXT/MD/JSON) → parsing, normalisation Unicode, découpage en chunks, criblage via le détecteur d'injection, persistance (SQLite) → retourne un `corpus_id`.
+- `POST /query` : `corpus_id` + question → exécute l'agent sur le corpus sain, retourne le `Report` complet (réponse citée + quarantaine).
+- `GET /report/<report_id>` : relit un rapport déjà généré.
 
 ```text
-Frontend (frontend/dist, build React — servi par Flask)
-    │  fetch POST /api/ask { message }
+Upload (PDF/DOCX/TXT/MD/JSON)
+    │  POST /ingest
     ▼
-Backend Flask (app.py)
-    │  clé API lue côté serveur uniquement, jamais exposée au frontend
+Pipeline d'ingestion (src/rene_la_taupe/ingestion)
+    │  parsing → normalisation Unicode → chunking → détection d'injection
     ▼
-API Anthropic (appel réel)
-    │
+SQLite (src/rene_la_taupe/tools/sqlite_store.py)
+    │  documents, chunks, quarantine_entries, reports
     ▼
-Backend → Frontend (réponse affichée)
+POST /query → moteur agentique → Report (réponse citée + quarantaine)
 ```
 
-Un seul process Python sert à la fois le frontend buildé et la route API — pas de base de données, pas de Docker.
+Le moteur agentique (recherche dans le corpus, génération de réponse citée, détection d'injection) est fourni par le module `src/rene_la_taupe/` — implémentation et responsabilité de Yo, le backend s'y branche mais n'en gère pas la logique interne.
 
-À ce stade, aucun traitement de corpus ni détection d'injection dans l'app web : c'est uniquement le tuyau de bout en bout (frontend → backend → LLM réel → backend → frontend). Le moteur agentique de Yo (ci-dessous) implémente la partie détection/quarantaine/citations visée par [OUTILS.md](OUTILS.md), mais tourne pour l'instant en dehors de l'app web.
+Logs de sécurité structurés (JSON) : chaque étape d'ingestion et de détection est tracée, voir `src/rene_la_taupe/security_log.py`.
 
-## Structure (Yo)
+## Limites connues (palier 2)
 
-```
-src/rene_la_taupe/
-├── agent.py           # Boucle de décision LLM (moteur principal)
-├── detection/         # Barrière détection injection (LLM-juge)
-├── prompts/           # Prompts système avec séparation données/instructions
-├── schemas/           # Modèles Pydantic (DocHit, QuarantineEntry, Report, etc.)
-└── tools/             # 6 outils typés (search_corpus, cite_sources, finalize_report, etc.)
-```
-
-## Rôle de Yo (Palier 2)
-
-- **Moteur agentique** : `ReneLaTaupeAgent.run(corpus_id, question)` → `Report`
-- **6 outils typés** : signatures conformes à `OUTILS.md`
-- **Détection injection** : `InjectionDetector.analyze(doc_id, text)` → `DetectionResult`
-- **Prompts système** : séparation stricte données vs instructions
-- **Tests standalone** : `scripts/test_agent.py` (detection + agent)
-
-## Dépendances externes
-
-- `ANTHROPIC_API_KEY` dans `.env` (obligatoire, pour l'app web et le moteur agentique)
-- Backend (Kévin) : fournira `CorpusStore` et `ReportStore` persistants, et la route qui appellera `ReneLaTaupeAgent`
-- Frontend (Niko) : appellera cette route une fois exposée par le backend
-
-## Happy Path cible (6 étapes)
-
-1. Upload corpus + question
-2. Ingestion & criblage (détection → quarantaine)
-3. `search_corpus` sur documents **clean uniquement**
-4. Génération réponse + `cite_sources`
-5. `list_quarantine` + `finalize_report`
-6. Affichage dashboard (réponse + citations + panneau quarantaine)
-
-C'est l'architecture cible complète, construite progressivement — pas encore la réalité du Palier 2 (voir [Limites connues](#limites-connues)).
-
-## Choix retenus et écartés
-
-- **Flask plutôt que FastAPI** (app web) : un seul fichier, zéro configuration ASGI, suffisant pour une route.
-- **Flask sert le build React (`frontend/dist`) plutôt que `static/index.html`** : un seul serveur pour l'expérience complète en démo. Contrepartie assumée : Node/npm redevient un prérequis du quickstart web. `static/index.html` reste dans le dépôt mais n'est plus servi par Flask — c'est le frontend minimal du socle initial, superseded, pas un fallback actif.
-- **Pas de Docker** : ajoute une dépendance (le démon Docker) et du temps de build pour un bénéfice nul à ce stade ; un `venv` Python suffit.
-- **Deux dépendances Python séparées (`requirements.txt` pour l'app web, `pyproject.toml` pour le moteur agentique)** : pas encore unifiées — chaque brique s'installe indépendamment pour l'instant, à consolider quand le moteur sera branché à l'app web.
-
-## Limites connues
-
-- L'app web et le moteur agentique de Yo ne sont **pas encore branchés ensemble** : l'app web répond via un appel LLM direct (pas d'outils, pas de corpus, pas de détection) ; le moteur agentique tourne en standalone via `scripts/test_agent.py`.
-- Aucune gestion de l'historique de conversation dans l'app web (chaque message est indépendant).
-- Aucune ingestion de corpus persistante, aucune quarantaine réelle — `CorpusStore`/`ReportStore` restent à construire côté backend (Kévin).
-- Les fichiers déposés via le dashboard React sont stagés visuellement côté frontend uniquement ; ils ne sont pas envoyés au backend (pas de route d'ingestion à ce stade).
-- Pas de tests automatisés pour l'app web à ce stade (le moteur agentique de Yo a les siens, voir `scripts/test_agent.py`).
+- Aucune gestion de l'historique de conversation sur `/api/ask` (chaque message est indépendant).
+- Recherche dans le corpus par recouvrement de mots-clés (pas d'embeddings/BM25 pour l'instant).
+- Pas de tests automatisés côté backend à ce stade.
+- Déploiement : pas encore fait (bonus optionnel).
 
 ## Documentation du projet
 
-- [SPEC.md](SPEC.md) — problème, user stories, hors-scope, happy path, répartition du travail.
-- [MENACES.md](MENACES.md) — modèle de menace, canaux d'entrée.
-- [OUTILS.md](OUTILS.md) — architecture cible et signatures d'outils.
+- [SPEC.md](SPEC.md) : problème, user stories, hors-scope, happy path, répartition du travail.
+- [MENACES.md](MENACES.md) : modèle de menace, canaux d'entrée.
+- [OUTILS.md](OUTILS.md) : architecture cible et signatures d'outils.
