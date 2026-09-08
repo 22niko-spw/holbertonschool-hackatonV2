@@ -32,7 +32,7 @@ SEARCH_TOP_K = int(os.environ.get("SEARCH_TOP_K", "5"))
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "la_taupe.db")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "20"))
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
