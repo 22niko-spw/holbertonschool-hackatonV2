@@ -47,7 +47,7 @@ class InjectionDetector:
     Utilise un LLM-juge avec prompt système strict pour analyser un document.
     """
 
-    def __init__(self, llm_client: Any, model: str = "claude-3-5-haiku-20241022") -> None:
+    def __init__(self, llm_client: Any, model: str = "claude-haiku-4-5-20251001") -> None:
         self.llm = llm_client
         self.model = model
 
@@ -65,13 +65,20 @@ class InjectionDetector:
             response = self.llm.messages.create(
                 model=self.model,
                 max_tokens=1000,
-                temperature=0.0,
                 system=DETECTION_SYSTEM_PROMPT,
                 messages=[
                     {"role": "user", "content": f"DOCUMENT ID: {doc_id}\n\nCONTENU:\n{text}\n\nAnalyse ce document et retourne UNIQUEMENT le JSON de détection."}
                 ],
             )
             content = response.content[0].text if response.content else "{}"
+            # Strip markdown code blocks if present
+            content = content.strip()
+            if content.startswith("```"):
+                lines = content.split("\n")
+                # Find first and last non-markdown lines
+                start = 1 if lines[0].startswith("```") else 0
+                end = len(lines) - 1 if lines[-1].startswith("```") else len(lines)
+                content = "\n".join(lines[start:end])
             data = json.loads(content)
             result = DetectionResult(**data)
             logger.info(f"Détection doc={doc_id} suspect={result.suspect} confidence={result.confidence} attempts={len(result.attempts)}")

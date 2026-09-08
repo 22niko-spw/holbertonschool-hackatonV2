@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentConfig:
-    model: str = "claude-3-5-haiku-20241022"
+    model: str = "claude-haiku-4-5-20251001"
     temperature: float = 0.0
     max_search_results: int = 5
     max_tokens: int = 1500
