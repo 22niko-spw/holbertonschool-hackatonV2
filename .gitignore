@@ -1,20 +1,49 @@
-# Secrets — jamais commités
-.env
-*.env
-!.env.example
-
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
 *.egg-info/
+dist/
+build/
+wheelhouse/
+
+# Virtual environments
 .venv/
 venv/
 env/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+ENV/
 
-# Éditeurs / OS
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test outputs
+report_test.json
