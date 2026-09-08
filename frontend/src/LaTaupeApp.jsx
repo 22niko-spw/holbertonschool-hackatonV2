@@ -22,8 +22,8 @@ import {
   Moon,
   Loader2,
   ArrowUp,
-  Undo2,
   X,
+  Undo2,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +68,9 @@ const TOKENS = {
     roseText: "text-rose-400",
     roseTextDim: "text-rose-300/90",
     roseIconWrap: "border-rose-500/25 bg-rose-500/10",
+    amberCard: "border-amber-500/25 bg-amber-500/[0.04]",
+    amberCardHover: "hover:bg-amber-500/[0.07]",
+    amberText: "text-amber-400",
   },
   light: {
     page: "bg-neutral-50 text-neutral-900",
@@ -106,11 +109,18 @@ const TOKENS = {
     roseText: "text-rose-600",
     roseTextDim: "text-rose-300/90",
     roseIconWrap: "border-rose-200 bg-rose-100",
+    amberCard: "border-amber-200 bg-amber-50",
+    amberCardHover: "hover:bg-amber-100/70",
+    amberText: "text-amber-600",
   },
 };
 
 const ThemeContext = createContext(TOKENS.dark);
 const useT = () => useContext(ThemeContext);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -162,10 +172,10 @@ function ThemeToggle({ dark, setDark }) {
 }
 
 // ---------------------------------------------------------------------------
-// Reusable dropzone (visual only — file handling passed in via props)
+// Dropzone — files picked here are uploaded to POST /ingest on launch
 // ---------------------------------------------------------------------------
 
-function Dropzone({ onFiles, big, disabled }) {
+function Dropzone({ onFiles, big }) {
   const T = useT();
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
@@ -174,27 +184,10 @@ function Dropzone({ onFiles, big, disabled }) {
     (e) => {
       e.preventDefault();
       setDragOver(false);
-      if (disabled) return;
       if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
     },
-    [onFiles, disabled]
+    [onFiles]
   );
-
-  if (disabled) {
-    return (
-      <div
-        className={`rounded-lg border border-dashed text-center cursor-not-allowed opacity-50 ${
-          big ? "px-6 py-12" : "px-5 py-8"
-        } ${T.dropIdle}`}
-      >
-        <div className={`mx-auto mb-3 flex items-center justify-center rounded-md border ${T.chip} ${big ? "h-11 w-11" : "h-9 w-9"}`}>
-          <Upload size={big ? 18 : 16} className={T.textMuted} strokeWidth={2} />
-        </div>
-        <p className={`${big ? "text-[15px]" : "text-sm"} ${T.textSecondary}`}>Analyse de corpus</p>
-        <p className={`mt-1 text-xs ${T.textFaint}`}>Disponible à un palier ultérieur — pas encore branché au backend</p>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -202,7 +195,7 @@ function Dropzone({ onFiles, big, disabled }) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".pdf,.txt,.md"
+        accept=".pdf,.docx,.txt,.md,.json"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) onFiles(e.target.files);
@@ -231,7 +224,7 @@ function Dropzone({ onFiles, big, disabled }) {
           {dragOver ? "Release to add to corpus" : "Drag and drop corpus files"}
         </p>
         <p className={`mt-1 text-xs ${T.textFaint}`}>
-          PDF, TXT, MD — or{" "}
+          PDF, DOCX, TXT, MD, JSON — or{" "}
           <span className={`${T.textSecondary} underline underline-offset-2`}>click to browse</span>
         </p>
       </div>
@@ -306,12 +299,12 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
           <ShieldAlert size={22} className={T.textMuted} strokeWidth={1.75} />
         </div>
         <h2 className={`text-[22px] font-semibold tracking-tight text-center ${T.textPrimary}`}>
-          Pose ta question à La Taupe
+          Analyse ton corpus documentaire
         </h2>
         <p className={`mt-2 mb-8 text-center text-[13.5px] leading-relaxed ${T.textMuted}`}>
-          Socle du Palier 2 : ta question part vers un vrai modèle. Les fichiers
-          déposés ci-dessous sont stagés visuellement — leur analyse (détection
-          d'injection, quarantaine) arrive aux paliers suivants.
+          Dépose tes fichiers, pose ta question. La Taupe isole les tentatives
+          d'injection avant de synthétiser les documents sains. Sans fichier,
+          ta question part directement vers le modèle.
         </p>
 
         <div className="w-full space-y-3">
@@ -337,8 +330,8 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
             <div className="flex items-center justify-between px-3.5 pb-2.5 pt-1">
               <span className={`text-[11px] ${T.textFainter}`}>
                 {staged.length > 0
-                  ? `${staged.length} fichier${staged.length > 1 ? "s" : ""} stagé${staged.length > 1 ? "s" : ""} — pas encore envoyé au backend`
-                  : "Réponse générée par un vrai appel au modèle — aucune analyse de corpus à ce stade"}
+                  ? `${staged.length} fichier${staged.length > 1 ? "s" : ""} prêt${staged.length > 1 ? "s" : ""}`
+                  : "Aucun fichier ajouté"}
               </span>
               <button
                 onClick={onLaunch}
@@ -382,10 +375,7 @@ function HealthyCard({ doc, selected, onSelect }) {
           )}
           <div className="min-w-0">
             <p className={`truncate font-mono text-[13px] ${T.textSecondary}`}>{doc.name}</p>
-            <p className={`mt-0.5 text-[11px] ${T.textFaint}`}>
-              {doc.size}
-              {doc.duration ? ` · ${doc.duration}` : ""}
-            </p>
+            {doc.size && <p className={`mt-0.5 text-[11px] ${T.textFaint}`}>{doc.size}</p>}
           </div>
         </div>
         {doc.status === "processing" ? (
@@ -414,10 +404,7 @@ function QuarantinedCard({ doc, selected, onSelect }) {
           <FileWarning size={15} className={`mt-0.5 shrink-0 ${T.roseText}`} strokeWidth={1.75} />
           <div className="min-w-0">
             <p className={`truncate font-mono text-[13px] ${T.textSecondary}`}>{doc.name}</p>
-            <p className={`mt-0.5 text-[11px] ${T.textFaint}`}>
-              {doc.size}
-              {doc.duration ? ` · ${doc.duration}` : ""}
-            </p>
+            {doc.size && <p className={`mt-0.5 text-[11px] ${T.textFaint}`}>{doc.size}</p>}
           </div>
         </div>
         <Badge tone="rose" icon={AlertTriangle}>
@@ -428,26 +415,32 @@ function QuarantinedCard({ doc, selected, onSelect }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Right column: aggregated summary
-// ---------------------------------------------------------------------------
-
-function renderInline(text, T) {
-  const parts = text.split(/(\[[\w.-]+\])/g);
-  return parts.map((part, idx) =>
-    /^\[[\w.-]+\]$/.test(part) ? (
-      <span key={idx} className={`mx-0.5 rounded border px-1.5 py-0.5 font-mono text-[11px] ${T.tag}`}>
-        {part.slice(1, -1)}
-      </span>
-    ) : (
-      part
-    )
+function ErrorCard({ doc }) {
+  const T = useT();
+  return (
+    <div className={`w-full text-left rounded-lg border px-3.5 py-3 ${T.amberCard}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <FileWarning size={15} className={`mt-0.5 shrink-0 ${T.amberText}`} strokeWidth={1.75} />
+          <div className="min-w-0">
+            <p className={`truncate font-mono text-[13px] ${T.textSecondary}`}>{doc.name}</p>
+            {doc.error && <p className={`mt-0.5 text-[11px] ${T.textFaint}`}>{doc.error}</p>}
+          </div>
+        </div>
+        <Badge tone="amber">NON TRAITÉ</Badge>
+      </div>
+    </div>
   );
 }
 
-function AggregatedSummary({ question, answer, loading, error }) {
+// ---------------------------------------------------------------------------
+// Right column: answer + citations
+// ---------------------------------------------------------------------------
+
+function AggregatedSummary({ question, answer, citations, docsById, loading, loadingStage, error }) {
   const T = useT();
   const lines = (answer || "").split("\n");
+  const sourceDocIds = [...new Set((citations || []).map((c) => c.doc_id))];
 
   return (
     <div className={`rounded-lg border p-5 ${T.card}`}>
@@ -466,39 +459,43 @@ function AggregatedSummary({ question, answer, loading, error }) {
       {loading && (
         <div className={`flex items-center gap-2 text-[13.5px] ${T.textMuted}`}>
           <Loader2 size={14} className="animate-spin" />
-          Génération de la réponse…
+          {loadingStage === "ingesting" ? "Analyse des documents…" : "Génération de la réponse…"}
         </div>
       )}
 
-      {!loading && error && (
-        <p className="text-[13.5px] leading-relaxed text-rose-400">Erreur : {error}</p>
-      )}
+      {!loading && error && <p className="text-[13.5px] leading-relaxed text-rose-400">Erreur : {error}</p>}
 
       {!loading && !error && answer && (
-        <div>
-          {lines.map((line, i) => {
-            if (line.startsWith("## ")) {
+        <>
+          <div>
+            {lines.map((line, i) => {
+              if (line.trim() === "") return <div key={i} className="h-1" />;
+              if (line.startsWith("- ")) {
+                return (
+                  <li key={i} className={`ml-4 list-disc text-[13.5px] leading-relaxed ${T.textMuted}`}>
+                    {line.slice(2)}
+                  </li>
+                );
+              }
               return (
-                <h3 key={i} className={`mt-5 mb-2 text-[13px] font-semibold uppercase tracking-wide first:mt-0 ${T.textSecondary}`}>
-                  {line.slice(3)}
-                </h3>
+                <p key={i} className={`text-[13.5px] leading-relaxed ${T.textMuted}`}>
+                  {line}
+                </p>
               );
-            }
-            if (line.startsWith("- ")) {
-              return (
-                <li key={i} className={`ml-4 list-disc text-[13.5px] leading-relaxed ${T.textMuted}`}>
-                  {renderInline(line.slice(2), T)}
-                </li>
-              );
-            }
-            if (line.trim() === "") return <div key={i} className="h-1" />;
-            return (
-              <p key={i} className={`text-[13.5px] leading-relaxed ${T.textMuted}`}>
-                {renderInline(line, T)}
-              </p>
-            );
-          })}
-        </div>
+            })}
+          </div>
+
+          {sourceDocIds.length > 0 && (
+            <div className={`mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3 ${T.card}`}>
+              <span className={`text-[11px] uppercase tracking-wide ${T.textFaint}`}>Sources</span>
+              {sourceDocIds.map((docId) => (
+                <span key={docId} className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${T.tag}`}>
+                  {docsById[docId] || docId}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {!loading && !error && !answer && (
@@ -512,78 +509,70 @@ function AggregatedSummary({ question, answer, loading, error }) {
 // Right column: security audit panel
 // ---------------------------------------------------------------------------
 
-function SecurityAudit({ doc }) {
+function SecurityAudit({ doc, entries }) {
   const T = useT();
-  const [copied, setCopied] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState(null);
 
-  const handleCopy = async () => {
+  const handleCopy = async (text, idx) => {
     try {
-      await navigator.clipboard.writeText(doc.payload || "");
+      await navigator.clipboard.writeText(text || "");
     } catch (e) {
       // clipboard may be unavailable in this environment — fail silently
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setCopiedIndex(idx);
+    setTimeout(() => setCopiedIndex(null), 1500);
   };
 
   return (
     <div className="space-y-4">
       <div className={`rounded-lg border p-5 ${T.roseCard}`}>
-        <div className="mb-4 flex items-start gap-3">
+        <div className="flex items-start gap-3">
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${T.roseIconWrap}`}>
             <ShieldAlert size={16} className={T.roseText} strokeWidth={2} />
           </div>
           <div>
-            <p className={`text-sm font-medium ${T.textPrimary}`}>{doc.category}</p>
-            <p className={`mt-0.5 text-[12px] ${T.textFaint}`}>Isolated before entering the aggregation pipeline</p>
+            <p className={`text-sm font-medium ${T.textPrimary}`}>{doc.name}</p>
+            <p className={`mt-0.5 text-[12px] ${T.textFaint}`}>
+              Isolé avant la génération de la réponse — {entries.length} détection{entries.length > 1 ? "s" : ""}
+            </p>
           </div>
         </div>
-
-        <dl className={`grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 ${T.roseDivider}`}>
-          <div>
-            <dt className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Target document</dt>
-            <dd className={`mt-1 font-mono text-[12.5px] ${T.textSecondary}`}>{doc.name}</dd>
-          </div>
-          <div>
-            <dt className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Timestamp</dt>
-            <dd className={`mt-1 flex items-center gap-1.5 font-mono text-[12.5px] ${T.textSecondary}`}>
-              <Clock size={11} className={T.textFaint} />
-              {doc.timestamp}
-            </dd>
-          </div>
-          <div className="col-span-2">
-            <dt className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Reason for isolation</dt>
-            <dd className={`mt-1 text-[13px] leading-relaxed ${T.textMuted}`}>{doc.reason}</dd>
-          </div>
-        </dl>
       </div>
 
-      {/* Payload viewer stays dark regardless of theme — a terminal pane, not page chrome */}
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/60 px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <Terminal size={13} className="text-neutral-500" />
-            <span className="text-[12px] text-neutral-400">Extracted payload</span>
+      {entries.map((entry, idx) => (
+        <div key={idx} className="rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/60 px-4 py-2.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <Terminal size={13} className="shrink-0 text-neutral-500" />
+              <span className="truncate text-[12px] font-mono text-neutral-400">{entry.technique}</span>
+              <span className="shrink-0 text-[11px] text-neutral-500">
+                confiance {(entry.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <button
+              onClick={() => handleCopy(entry.excerpt, idx)}
+              className="flex shrink-0 items-center gap-1.5 rounded border border-neutral-800 px-2 py-1 text-[11px] text-neutral-400 hover:text-neutral-200 hover:border-neutral-700 transition-colors"
+            >
+              {copiedIndex === idx ? (
+                <>
+                  <Check size={11} /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy size={11} /> Copy
+                </>
+              )}
+            </button>
           </div>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 rounded border border-neutral-800 px-2 py-1 text-[11px] text-neutral-400 hover:text-neutral-200 hover:border-neutral-700 transition-colors"
-          >
-            {copied ? (
-              <>
-                <Check size={11} /> Copied
-              </>
-            ) : (
-              <>
-                <Copy size={11} /> Copy
-              </>
-            )}
-          </button>
+          <pre className="overflow-x-auto p-4 text-[12.5px] leading-relaxed">
+            <code className="font-mono text-rose-300/90 whitespace-pre-wrap">{entry.excerpt}</code>
+          </pre>
+          <div className="flex items-center gap-1.5 px-4 pb-3 text-[11px] text-neutral-500">
+            <Clock size={11} />
+            {entry.detected_at}
+          </div>
         </div>
-        <pre className="overflow-x-auto p-4 text-[12.5px] leading-relaxed">
-          <code className="font-mono text-rose-300/90 whitespace-pre-wrap">{doc.payload}</code>
-        </pre>
-      </div>
+      ))}
     </div>
   );
 }
@@ -592,16 +581,34 @@ function SecurityAudit({ doc }) {
 // DASHBOARD PAGE
 // ---------------------------------------------------------------------------
 
-function Dashboard({ dark, setDark, docs, question, answer, loading, error, onBack }) {
+function Dashboard({
+  dark,
+  setDark,
+  docs,
+  question,
+  answer,
+  citations,
+  quarantineEntries,
+  loading,
+  loadingStage,
+  error,
+  onBack,
+}) {
   const T = useT();
   const [activeTab, setActiveTab] = useState("summary");
   const [selectedDoc, setSelectedDoc] = useState(null);
 
-  const healthy = docs.filter((d) => d.status === "healthy");
+  const healthy = docs.filter((d) => d.status === "clean");
   const quarantined = docs.filter((d) => d.status === "quarantined");
   const processing = docs.filter((d) => d.status === "processing");
+  const errored = docs.filter((d) => d.status === "error");
+
+  const docsById = Object.fromEntries(docs.map((d) => [d.id, d.name]));
 
   const selectedQuarantinedDoc = quarantined.find((d) => d.id === selectedDoc) || quarantined[0];
+  const selectedEntries = selectedQuarantinedDoc
+    ? quarantineEntries.filter((e) => e.doc_id === selectedQuarantinedDoc.id)
+    : [];
 
   return (
     <div className={`min-h-screen w-full font-sans transition-colors ${T.page}`}>
@@ -670,8 +677,6 @@ function Dashboard({ dark, setDark, docs, question, answer, loading, error, onBa
       <main className="mx-auto max-w-[1400px] px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-5">
           <div className="space-y-5">
-            <Dropzone disabled />
-
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <h2 className={`text-[12px] font-medium uppercase tracking-wide ${T.textFaint}`}>Healthy Corpus</h2>
@@ -719,6 +724,20 @@ function Dashboard({ dark, setDark, docs, question, answer, loading, error, onBa
                 ))}
               </div>
             </div>
+
+            {errored.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <h2 className={`text-[12px] font-medium uppercase tracking-wide ${T.amberText}`}>Non traités</h2>
+                  <span className={`text-[11px] ${T.textFainter}`}>({errored.length})</span>
+                </div>
+                <div className="space-y-2">
+                  {errored.map((doc) => (
+                    <ErrorCard key={doc.id} doc={doc} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -750,9 +769,17 @@ function Dashboard({ dark, setDark, docs, question, answer, loading, error, onBa
             </div>
 
             {activeTab === "summary" || !selectedQuarantinedDoc ? (
-              <AggregatedSummary question={question} answer={answer} loading={loading} error={error} />
+              <AggregatedSummary
+                question={question}
+                answer={answer}
+                citations={citations}
+                docsById={docsById}
+                loading={loading}
+                loadingStage={loadingStage}
+                error={error}
+              />
             ) : (
-              <SecurityAudit doc={selectedQuarantinedDoc} />
+              <SecurityAudit doc={selectedQuarantinedDoc} entries={selectedEntries} />
             )}
           </div>
         </div>
@@ -770,15 +797,16 @@ export default function LaTaupeApp() {
   const T = dark ? TOKENS.dark : TOKENS.light;
 
   const [view, setView] = useState("home");
+  const [docs, setDocs] = useState([]);
   const [question, setQuestion] = useState("");
   const [askedQuestion, setAskedQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [staged, setStaged] = useState([]);
-
-  // No corpus ingestion yet — docs stays empty until a real /ingest route exists.
-  const docs = [];
+  const [answer, setAnswer] = useState("");
+  const [citations, setCitations] = useState([]);
+  const [quarantineEntries, setQuarantineEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState(null);
+  const [error, setError] = useState("");
 
   const addStaged = useCallback((fileList) => {
     const entries = Array.from(fileList).map((file) => ({
@@ -796,33 +824,92 @@ export default function LaTaupeApp() {
     const trimmed = question.trim();
     if (!trimmed) return;
 
+    const filesToUpload = staged.map((e) => e.file);
+
     setAskedQuestion(trimmed);
     setAnswer("");
+    setCitations([]);
+    setQuarantineEntries([]);
     setError("");
-    setLoading(true);
     setStaged([]);
     setView("dashboard");
+    setLoading(true);
+
+    // No files: plain question, no corpus to search — direct LLM call.
+    if (filesToUpload.length === 0) {
+      setDocs([]);
+      setLoadingStage("querying");
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erreur inconnue");
+        setAnswer(data.reply);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+        setLoadingStage(null);
+      }
+      return;
+    }
+
+    // Files staged: real ingestion, then a real query against the corpus.
+    setDocs(
+      filesToUpload.map((file, i) => ({
+        id: `pending_${i}`,
+        name: file.name,
+        status: "processing",
+      }))
+    );
+    setLoadingStage("ingesting");
 
     try {
-      const res = await fetch("/api/ask", {
+      const formData = new FormData();
+      filesToUpload.forEach((file) => formData.append("files", file));
+
+      const ingestRes = await fetch("/ingest", { method: "POST", body: formData });
+      const ingestData = await ingestRes.json();
+      if (!ingestRes.ok) throw new Error(ingestData.error || "Erreur lors de l'ingestion.");
+
+      const newDocs = ingestData.documents.map((d, i) => ({
+        id: d.doc_id || `error_${i}`,
+        name: d.filename,
+        status: d.status,
+        error: d.error,
+      }));
+      setDocs(newDocs);
+
+      setLoadingStage("querying");
+      const queryRes = await fetch("/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ corpus_id: ingestData.corpus_id, question: trimmed }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur inconnue");
-      setAnswer(data.reply);
+      const report = await queryRes.json();
+      if (!queryRes.ok) throw new Error(report.error || "Erreur lors de la génération de la réponse.");
+
+      setAnswer(report.answer.answer);
+      setCitations(report.answer.citations || []);
+      setQuarantineEntries(report.quarantine || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setLoadingStage(null);
     }
   };
 
   const backToHome = () => {
+    setDocs([]);
     setQuestion("");
     setAskedQuestion("");
     setAnswer("");
+    setCitations([]);
+    setQuarantineEntries([]);
     setError("");
     setStaged([]);
     setView("home");
@@ -849,7 +936,10 @@ export default function LaTaupeApp() {
           docs={docs}
           question={askedQuestion}
           answer={answer}
+          citations={citations}
+          quarantineEntries={quarantineEntries}
           loading={loading}
+          loadingStage={loadingStage}
           error={error}
           onBack={backToHome}
         />

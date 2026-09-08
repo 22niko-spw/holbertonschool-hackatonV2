@@ -1,57 +1,63 @@
-# René LA TAUPE — Palier 2 (Yo: Moteur Agentique & Sécurité)
+# LA TAUPE
 
-## Quickstart (≤ 5 min)
+Agent capable d'analyser un corpus de documents dont certains peuvent contenir des tentatives d'injection de prompt. Voir [SPEC.md](SPEC.md) pour le cadrage complet et [MENACES.md](MENACES.md) pour le modèle de menace.
+
+## Quickstart (< 5 min)
+
+Prérequis : Python 3.10+, une clé API Anthropic.
 
 ```bash
-# 1. Cloner
 git clone https://github.com/22niko-spw/holbertonschool-hackatonV2.git
 cd holbertonschool-hackatonV2
 
-# 2. Créer venv + installer
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+python3 -m venv venv
+source venv/bin/activate        # Windows : venv\Scripts\activate
 
-# 3. Configurer .env
+pip install -r requirements.txt
+
 cp .env.example .env
-# Éditer .env et mettre votre ANTHROPIC_API_KEY
+# éditer .env et coller votre ANTHROPIC_API_KEY
 
-# 4. Tester le détecteur d'injection
-python -m scripts.test_agent detection
-
-# 5. Tester l'agent complet (happy path)
-python -m scripts.test_agent agent --question "Quels sont les risques chimiques ?"
+python app.py
 ```
 
-## Structure (Yo)
+Ouvrir [http://localhost:5000](http://localhost:5000), écrire un message, cliquer sur "Envoyer" : la réponse vient d'un vrai appel au modèle Claude, pas d'un mock.
 
+## Backend (Kévin)
+
+Routes exposées par `app.py` :
+
+- `POST /api/ask` : question libre → réponse LLM directe (socle palier 2).
+- `POST /ingest` : upload multipart de documents (PDF/DOCX/TXT/MD/JSON) → parsing, normalisation Unicode, découpage en chunks, criblage via le détecteur d'injection, persistance (SQLite) → retourne un `corpus_id`.
+- `POST /query` : `corpus_id` + question → exécute l'agent sur le corpus sain, retourne le `Report` complet (réponse citée + quarantaine).
+- `GET /report/<report_id>` : relit un rapport déjà généré.
+
+```text
+Upload (PDF/DOCX/TXT/MD/JSON)
+    │  POST /ingest
+    ▼
+Pipeline d'ingestion (src/rene_la_taupe/ingestion)
+    │  parsing → normalisation Unicode → chunking → détection d'injection
+    ▼
+SQLite (src/rene_la_taupe/tools/sqlite_store.py)
+    │  documents, chunks, quarantine_entries, reports
+    ▼
+POST /query → moteur agentique → Report (réponse citée + quarantaine)
 ```
-src/rene_la_taupe/
-├── agent.py           # Boucle de décision LLM (moteur principal)
-├── detection/         # Barrière détection injection (LLM-juge)
-├── prompts/           # Prompts système avec séparation données/instructions
-├── schemas/           # Modèles Pydantic (DocHit, QuarantineEntry, Report, etc.)
-└── tools/             # 6 outils typés (search_corpus, cite_sources, finalize_report, etc.)
-```
 
-## Rôle de Yo (Palier 2)
+Le moteur agentique (recherche dans le corpus, génération de réponse citée, détection d'injection) est fourni par le module `src/rene_la_taupe/` — implémentation et responsabilité de Yo, le backend s'y branche mais n'en gère pas la logique interne.
 
-- **Moteur agentique** : `ReneLaTaupeAgent.run(corpus_id, question)` → `Report`
-- **6 outils typés** : signatures conformes à `OUTILS.md`
-- **Détection injection** : `InjectionDetector.analyze(doc_id, text)` → `DetectionResult`
-- **Prompts système** : séparation stricte données vs instructions
-- **Tests standalone** : `scripts/test_agent.py` (detection + agent)
+Logs de sécurité structurés (JSON) : chaque étape d'ingestion et de détection est tracée, voir `src/rene_la_taupe/security_log.py`.
 
-## Dépendances externes
+## Limites connues (palier 2)
 
-- `ANTHROPIC_API_KEY` dans `.env` (obligatoire)
-- Backend (Kévin) : fournira `CorpusStore` et `ReportStore` persistants
-- Frontend (Niko) : appellera l'API qui utilise `ReneLaTaupeAgent`
+- Aucune gestion de l'historique de conversation sur `/api/ask` (chaque message est indépendant).
+- Recherche dans le corpus par recouvrement de mots-clés (pas d'embeddings/BM25 pour l'instant).
+- Pas de tests automatisés côté backend à ce stade.
+- Déploiement : pas encore fait (bonus optionnel).
 
-## Happy Path (6 étapes)
+## Documentation du projet
 
-1. Upload corpus + question
-2. Ingestion & criblage (détection → quarantaine)
-3. `search_corpus` sur documents **clean uniquement**
-4. Génération réponse + `cite_sources`
-5. `list_quarantine` + `finalize_report`
-6. Affichage dashboard (réponse + citations + panneau quarantaine)
+- [SPEC.md](SPEC.md) : problème, user stories, hors-scope, happy path, répartition du travail.
+- [MENACES.md](MENACES.md) : modèle de menace, canaux d'entrée.
+- [OUTILS.md](OUTILS.md) : architecture cible et signatures d'outils.
