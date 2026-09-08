@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from rene_la_taupe.schemas import CitedAnswer, DocHit, DocMeta, QuarantineEntry, Report
 from rene_la_taupe.tools import CorpusStore, ReportStore
@@ -83,7 +83,7 @@ class SqliteDatabase:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             self._local.conn = conn
-        return self._local.conn
+        return self._local.conn  # type: ignore[no-any-return]
 
     def connection(self) -> sqlite3.Connection:
         return self._connect()
@@ -98,7 +98,7 @@ class SqliteCorpusStore(CorpusStore):
         with conn:
             conn.execute(
                 "INSERT OR IGNORE INTO corpora (corpus_id, status, created_at) VALUES (?, 'ingested', ?)",
-                (corpus_id, datetime.now(timezone.utc).isoformat()),
+                (corpus_id, datetime.now(UTC).isoformat()),
             )
 
     def add_document(
@@ -115,7 +115,7 @@ class SqliteCorpusStore(CorpusStore):
             conn.execute(
                 """INSERT INTO documents (doc_id, corpus_id, filename, status, upload_ts, sha256)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (doc_id, corpus_id, filename, status, datetime.now(timezone.utc).isoformat(), sha256),
+                (doc_id, corpus_id, filename, status, datetime.now(UTC).isoformat(), sha256),
             )
             conn.executemany(
                 "INSERT INTO chunks (chunk_id, doc_id, corpus_id, idx, text) VALUES (?, ?, ?, ?, ?)",
