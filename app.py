@@ -155,6 +155,9 @@ def query():
     data = request.get_json(silent=True) or {}
     corpus_id = (data.get("corpus_id") or "").strip()
     question = (data.get("question") or "").strip()
+    enabled_tools = data.get("enabled_tools")
+    if not isinstance(enabled_tools, list) or not all(isinstance(t, str) for t in enabled_tools):
+        enabled_tools = None
 
     if not corpus_id:
         return jsonify(error="Le champ 'corpus_id' est requis."), 400
@@ -163,13 +166,13 @@ def query():
     if not corpus_store.corpus_exists(corpus_id):
         return jsonify(error=f"Corpus inconnu : '{corpus_id}'."), 404
 
-    log_event("query.start", corpus_id=corpus_id, question=question[:200])
+    log_event("query.start", corpus_id=corpus_id, question=question[:200], enabled_tools=enabled_tools)
 
     agent = ReneLaTaupeAgent(
         client,
         corpus_store,
         report_store,
-        config=AgentConfig(model=ANTHROPIC_MODEL, max_search_results=SEARCH_TOP_K),
+        config=AgentConfig(model=ANTHROPIC_MODEL, max_search_results=SEARCH_TOP_K, enabled_tools=enabled_tools),
     )
 
     try:

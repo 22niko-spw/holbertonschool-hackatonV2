@@ -24,6 +24,8 @@ import {
   ArrowUp,
   X,
   Undo2,
+  Settings,
+  Wrench,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -128,6 +130,30 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Miroir de TOOL_DEFINITIONS dans src/rene_la_taupe/agent.py — noms exacts requis,
+// ce sont eux qui sont envoyés au backend dans enabled_tools.
+const AGENT_TOOLS = [
+  { name: "search_corpus", label: "Recherche corpus", description: "Recherche dans les documents sains du corpus." },
+  { name: "get_doc_metadata", label: "Métadonnées document", description: "Récupère les métadonnées d'un document." },
+  { name: "list_quarantine", label: "Liste quarantaine", description: "Liste les documents en quarantaine du corpus." },
+  { name: "read_quarantine_excerpt", label: "Lecture extrait quarantaine", description: "Lit l'extrait exact isolé, pour l'audit." },
+  { name: "cite_sources", label: "Citation des sources", description: "Attache les citations à la réponse générée." },
+  { name: "finalize_report", label: "Finalisation rapport", description: "Persiste le rapport final (seul outil à effet de bord)." },
+];
+
+const TOOLS_STORAGE_KEY = "la-taupe:enabled-tools";
+
+function loadEnabledTools() {
+  try {
+    const raw = localStorage.getItem(TOOLS_STORAGE_KEY);
+    if (!raw) return Object.fromEntries(AGENT_TOOLS.map((t) => [t.name, true]));
+    const saved = JSON.parse(raw);
+    return Object.fromEntries(AGENT_TOOLS.map((t) => [t.name, saved[t.name] !== false]));
+  } catch (e) {
+    return Object.fromEntries(AGENT_TOOLS.map((t) => [t.name, true]));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Small building blocks
 // ---------------------------------------------------------------------------
@@ -168,6 +194,79 @@ function ThemeToggle({ dark, setDark }) {
         <Moon size={14} className={T.textMuted} strokeWidth={2} />
       )}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tools settings — gear button (bottom-left) + panel to enable/disable the
+// agent's tools. Persisted in localStorage, sent to /query as enabled_tools
+// so the backend actually stops offering disabled tools to the model.
+// ---------------------------------------------------------------------------
+
+function ToolToggle({ tool, enabled, onChange }) {
+  const T = useT();
+  return (
+    <div className="flex items-start justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p className={`text-[12.5px] font-medium ${T.textSecondary}`}>{tool.label}</p>
+        <p className={`mt-0.5 text-[11px] leading-snug ${T.textFaint}`}>{tool.description}</p>
+      </div>
+      <button
+        role="switch"
+        aria-checked={enabled}
+        aria-label={`${enabled ? "Désactiver" : "Activer"} ${tool.label}`}
+        onClick={() => onChange(!enabled)}
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+          enabled ? "bg-emerald-500" : "bg-neutral-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+            enabled ? "translate-x-[18px]" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ToolsSettings({ enabledTools, setToolEnabled }) {
+  const T = useT();
+  const [open, setOpen] = useState(false);
+  const activeCount = Object.values(enabledTools).filter(Boolean).length;
+
+  return (
+    <div className="fixed bottom-4 left-4 z-20">
+      {open && (
+        <div className={`absolute bottom-12 left-0 w-80 rounded-lg border p-4 shadow-lg ${T.card}`}>
+          <div className="mb-1 flex items-center gap-2">
+            <Wrench size={13} className={T.textFaint} />
+            <h3 className={`text-[12.5px] font-semibold ${T.textPrimary}`}>Outils de l'agent</h3>
+          </div>
+          <p className={`mb-2 text-[11px] ${T.textFaint}`}>
+            {activeCount}/{AGENT_TOOLS.length} actifs — un outil désactivé n'est plus proposé au modèle.
+          </p>
+          <div className={`divide-y ${T.card}`}>
+            {AGENT_TOOLS.map((tool) => (
+              <ToolToggle
+                key={tool.name}
+                tool={tool}
+                enabled={enabledTools[tool.name] !== false}
+                onChange={(next) => setToolEnabled(tool.name, next)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Paramètres des outils"
+        aria-expanded={open}
+        className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-colors ${T.chip} ${T.chipHover}`}
+      >
+        <Settings size={16} className={T.textMuted} strokeWidth={2} />
+      </button>
+    </div>
   );
 }
 
@@ -898,6 +997,19 @@ export default function LaTaupeApp() {
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState(null);
   const [error, setError] = useState("");
+  const [enabledTools, setEnabledTools] = useState(loadEnabledTools);
+
+  const setToolEnabled = useCallback((name, value) => {
+    setEnabledTools((prev) => {
+      const next = { ...prev, [name]: value };
+      try {
+        localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        // localStorage indisponible — le toggle reste actif pour la session en cours
+      }
+      return next;
+    });
+  }, []);
 
   const addStaged = useCallback((fileList) => {
     const entries = Array.from(fileList).map((file) => ({
@@ -976,10 +1088,11 @@ export default function LaTaupeApp() {
       setDocs(newDocs);
 
       setLoadingStage("querying");
+      const activeTools = AGENT_TOOLS.map((t) => t.name).filter((name) => enabledTools[name] !== false);
       const queryRes = await fetch("/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ corpus_id: ingestData.corpus_id, question: trimmed }),
+        body: JSON.stringify({ corpus_id: ingestData.corpus_id, question: trimmed, enabled_tools: activeTools }),
       });
       const report = await queryRes.json();
       if (!queryRes.ok) throw new Error(report.error || "Erreur lors de la génération de la réponse.");
@@ -1039,6 +1152,7 @@ export default function LaTaupeApp() {
           onBack={backToHome}
         />
       )}
+      <ToolsSettings enabledTools={enabledTools} setToolEnabled={setToolEnabled} />
     </ThemeContext.Provider>
   );
 }
