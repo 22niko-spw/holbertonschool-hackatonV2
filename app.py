@@ -2,6 +2,7 @@
 import hashlib
 import os
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -11,6 +12,7 @@ import anthropic
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from rene_la_taupe import AgentConfig, ReneLaTaupeAgent, InjectionDetector
+from rene_la_taupe.agent import AgentLoopError, ToolExecutionError
 from rene_la_taupe.ingestion import (
     DocumentParseError,
     UnsupportedFileTypeError,
@@ -174,11 +176,16 @@ def query():
         report = agent.run(corpus_id, question)
     except anthropic.APIError:
         return jsonify(error="Erreur lors de l'appel au modèle."), 502
+    except AgentLoopError as exc:
+        return jsonify(error=f"Erreur dans la boucle de l'agent : {exc}"), 502
+    except ToolExecutionError as exc:
+        return jsonify(error=f"Erreur d'exécution d'outil : {exc}"), 502
 
     corpus_store.mark_processed(corpus_id)
     log_event("query.done", corpus_id=corpus_id, report_id=report.report_id)
 
-    return jsonify(report.model_dump())
+    trace = [asdict(t) for t in agent.get_traces()]
+    return jsonify(**report.model_dump(), trace=trace)
 
 
 @app.route("/report/<report_id>", methods=["GET"])
