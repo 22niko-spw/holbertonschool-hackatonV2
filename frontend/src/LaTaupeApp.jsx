@@ -578,6 +578,78 @@ function SecurityAudit({ doc, entries }) {
 }
 
 // ---------------------------------------------------------------------------
+// Right column: agent execution trace (Palier 3 — tool calls)
+// ---------------------------------------------------------------------------
+
+function ToolTraceEntry({ entry }) {
+  const T = useT();
+  const hasError = Boolean(entry.error);
+
+  return (
+    <div className={`rounded-lg border p-4 ${hasError ? T.roseCard : T.card}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`shrink-0 text-[11px] font-mono ${T.textFainter}`}>#{entry.turn}</span>
+          <Terminal size={13} className={`shrink-0 ${hasError ? T.roseText : T.textFaint}`} />
+          <span className={`truncate font-mono text-[13px] ${T.textSecondary}`}>{entry.tool_name}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {hasError ? (
+            <Badge tone="rose" icon={AlertTriangle}>
+              ÉCHEC
+            </Badge>
+          ) : (
+            <Badge tone="emerald" icon={CheckCircle2}>
+              OK
+            </Badge>
+          )}
+          <span className={`font-mono text-[11px] ${T.textFainter}`}>{entry.duration_ms.toFixed(1)} ms</span>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2.5">
+        <div>
+          <p className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Arguments</p>
+          <pre className={`mt-1 max-h-40 overflow-auto rounded border p-2 text-[11px] leading-relaxed ${T.cardAlt}`}>
+            <code className={`font-mono ${T.textMuted}`}>{JSON.stringify(entry.arguments, null, 2)}</code>
+          </pre>
+        </div>
+
+        {hasError ? (
+          <div>
+            <p className={`text-[10.5px] uppercase tracking-wide ${T.roseText}`}>Erreur</p>
+            <p className={`mt-1 text-[12.5px] leading-relaxed ${T.roseTextDim}`}>{entry.error}</p>
+          </div>
+        ) : (
+          <div>
+            <p className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Résultat</p>
+            <pre className={`mt-1 max-h-40 overflow-auto rounded border p-2 text-[11px] leading-relaxed ${T.cardAlt}`}>
+              <code className={`font-mono ${T.textMuted}`}>{JSON.stringify(entry.result, null, 2)}</code>
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AgentTrace({ trace }) {
+  const T = useT();
+
+  if (!trace || trace.length === 0) {
+    return <p className={`text-[13px] italic ${T.textFainter}`}>Aucun appel d'outil enregistré pour cette réponse.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {trace.map((entry, i) => (
+        <ToolTraceEntry key={i} entry={entry} />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // DASHBOARD PAGE
 // ---------------------------------------------------------------------------
 
@@ -589,6 +661,7 @@ function Dashboard({
   answer,
   citations,
   quarantineEntries,
+  trace,
   loading,
   loadingStage,
   error,
@@ -752,6 +825,21 @@ function Dashboard({
                 {activeTab === "summary" && <span className={`absolute bottom-0 left-0 right-0 h-[2px] ${T.tabUnderline}`} />}
               </button>
               <button
+                onClick={() => setActiveTab("trace")}
+                disabled={!trace || trace.length === 0}
+                className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  activeTab === "trace" ? T.tabActive : T.tabInactive
+                }`}
+              >
+                Agent Trace
+                {trace && trace.length > 0 && (
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${T.tag}`}>
+                    {trace.length}
+                  </span>
+                )}
+                {activeTab === "trace" && <span className={`absolute bottom-0 left-0 right-0 h-[2px] ${T.tabUnderline}`} />}
+              </button>
+              <button
                 onClick={() => setActiveTab("audit")}
                 disabled={quarantined.length === 0}
                 className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -768,7 +856,11 @@ function Dashboard({
               </button>
             </div>
 
-            {activeTab === "summary" || !selectedQuarantinedDoc ? (
+            {activeTab === "trace" ? (
+              <AgentTrace trace={trace} />
+            ) : activeTab === "audit" && selectedQuarantinedDoc ? (
+              <SecurityAudit doc={selectedQuarantinedDoc} entries={selectedEntries} />
+            ) : (
               <AggregatedSummary
                 question={question}
                 answer={answer}
@@ -778,8 +870,6 @@ function Dashboard({
                 loadingStage={loadingStage}
                 error={error}
               />
-            ) : (
-              <SecurityAudit doc={selectedQuarantinedDoc} entries={selectedEntries} />
             )}
           </div>
         </div>
@@ -804,6 +894,7 @@ export default function LaTaupeApp() {
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState([]);
   const [quarantineEntries, setQuarantineEntries] = useState([]);
+  const [trace, setTrace] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState(null);
   const [error, setError] = useState("");
@@ -830,12 +921,13 @@ export default function LaTaupeApp() {
     setAnswer("");
     setCitations([]);
     setQuarantineEntries([]);
+    setTrace([]);
     setError("");
     setStaged([]);
     setView("dashboard");
     setLoading(true);
 
-    // No files: plain question, no corpus to search — direct LLM call.
+    // No files: plain question, no corpus to search — direct LLM call, no agent loop, no trace.
     if (filesToUpload.length === 0) {
       setDocs([]);
       setLoadingStage("querying");
@@ -895,6 +987,7 @@ export default function LaTaupeApp() {
       setAnswer(report.answer.answer);
       setCitations(report.answer.citations || []);
       setQuarantineEntries(report.quarantine || []);
+      setTrace(report.trace || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -910,6 +1003,7 @@ export default function LaTaupeApp() {
     setAnswer("");
     setCitations([]);
     setQuarantineEntries([]);
+    setTrace([]);
     setError("");
     setStaged([]);
     setView("home");
@@ -938,6 +1032,7 @@ export default function LaTaupeApp() {
           answer={answer}
           citations={citations}
           quarantineEntries={quarantineEntries}
+          trace={trace}
           loading={loading}
           loadingStage={loadingStage}
           error={error}
