@@ -1,10 +1,13 @@
 # Moteur agentique — René LA TAUPE (Yo)
-# Boucle de décision LLM avec outils typés et étanchéité données/instructions.
+# Palier 3 : Boucle de décision LLM avec tool use réel, traçage, gestion d'erreurs.
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 import anthropic
 
@@ -15,7 +18,9 @@ from rene_la_taupe.tools import (
     ReportStore,
     cite_sources,
     finalize_report,
+    get_doc_metadata,
     list_quarantine,
+    read_quarantine_excerpt,
     search_corpus,
 )
 
@@ -28,15 +33,169 @@ class AgentConfig:
     temperature: float = 0.0
     max_search_results: int = 5
     max_tokens: int = 1500
+    max_tool_turns: int = 10
+
+
+@dataclass
+class ToolCallTrace:
+    """Traçage d'un appel d'outil pour audit visuel."""
+    turn: int
+    tool_name: str
+    arguments: dict
+    result: Any = None
+    error: str | None = None
+    duration_ms: float = 0.0
+    timestamp: float = field(default_factory=time.time)
+
+
+class ToolExecutionError(Exception):
+    """Erreur lors de l'exécution d'un outil (côté agent, pas LLM)."""
+    def __init__(self, tool_name: str, message: str, original: Exception | None = None):
+        self.tool_name = tool_name
+        self.message = message
+        self.original = original
+        super().__init__(f"[{tool_name}] {message}")
+
+
+class AgentLoopError(Exception):
+    """Erreur dans la boucle d'agent (max tours, LLM error, etc.)."""
+    pass
+
+
+TOOL_DEFINITIONS = [
+    {
+        "name": "search_corpus",
+        "description": "Recherche vectorielle/BM25 dans le corpus SAIN uniquement. Retourne les k passages les plus pertinents avec doc_id, chunk_id, score, text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Requête de recherche en langage naturel"},
+                "k": {"type": "integer", "description": "Nombre de résultats à retourner", "minimum": 1, "maximum": 20},
+                "corpus_id": {"type": "string", "description": "Identifiant du corpus"},
+            },
+            "required": ["query", "k", "corpus_id"],
+        },
+    },
+    {
+        "name": "get_doc_metadata",
+        "description": "Récupère les métadonnées d'un document (filename, status, upload_ts, sha256).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doc_id": {"type": "string", "description": "Identifiant du document"},
+            },
+            "required": ["doc_id"],
+        },
+    },
+    {
+        "name": "list_quarantine",
+        "description": "Liste les documents en quarantaine pour un corpus (technique, excerpt, confidence, detected_at).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "corpus_id": {"type": "string", "description": "Identifiant du corpus"},
+            },
+            "required": ["corpus_id"],
+        },
+    },
+    {
+        "name": "read_quarantine_excerpt",
+        "description": "Retourne l'extrait exact mis en quarantaine (pour affichage audit). Lecture seule, jamais injecté dans la génération.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doc_id": {"type": "string", "description": "Identifiant du document"},
+                "chunk_id": {"type": "string", "description": "Identifiant du chunk"},
+            },
+            "required": ["doc_id", "chunk_id"],
+        },
+    },
+    {
+        "name": "cite_sources",
+        "description": "Attache les citations aux segments de la réponse. Retourne answer + citations[{doc_id, chunk_id, span_start, span_end}].",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string", "description": "Réponse en langage naturel"},
+                "hits": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "doc_id": {"type": "string"},
+                            "chunk_id": {"type": "string"},
+                            "score": {"type": "number"},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["doc_id", "chunk_id", "score", "text"],
+                    },
+                },
+            },
+            "required": ["answer", "hits"],
+        },
+    },
+    {
+        "name": "finalize_report",
+        "description": "Écrit le rapport final en BDD — SEUL outil à effet de bord. Persiste réponse, citations, quarantaine, horodatage.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "corpus_id": {"type": "string", "description": "Identifiant du corpus"},
+                "answer": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {"type": "string"},
+                        "citations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "doc_id": {"type": "string"},
+                                    "chunk_id": {"type": "string"},
+                                    "span_start": {"type": "integer"},
+                                    "span_end": {"type": "integer"},
+                                },
+                                "required": ["doc_id", "chunk_id", "span_start", "span_end"],
+                            },
+                        },
+                    },
+                    "required": ["answer", "citations"],
+                },
+                "quarantine": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "doc_id": {"type": "string"},
+                            "technique": {"type": "string"},
+                            "excerpt": {"type": "string"},
+                            "confidence": {"type": "number"},
+                            "detected_at": {"type": "string"},
+                        },
+                        "required": ["doc_id", "technique", "excerpt", "confidence", "detected_at"],
+                    },
+                },
+            },
+            "required": ["corpus_id", "answer", "quarantine"],
+        },
+    },
+]
+
+
+TOOL_IMPL: dict[str, Callable] = {
+    "search_corpus": lambda args, store: search_corpus(args["query"], args["k"], args["corpus_id"], store),
+    "get_doc_metadata": lambda args, store: get_doc_metadata(args["doc_id"], store),
+    "list_quarantine": lambda args, store: list_quarantine(args["corpus_id"], store),
+    "read_quarantine_excerpt": lambda args, store: read_quarantine_excerpt(args["doc_id"], args["chunk_id"], store),
+    "cite_sources": lambda args, store: cite_sources(args["answer"], [DocHit(**h) for h in args["hits"]]),
+    "finalize_report": lambda args, store: finalize_report(args["corpus_id"], CitedAnswer(**args["answer"]), [__import__("rene_la_taupe.schemas", fromlist=["QuarantineEntry"]).QuarantineEntry(**q) for q in args["quarantine"]], store),  # type: ignore[arg-type]
+}
 
 
 class ReneLaTaupeAgent:
     """
-    Agent principal qui orchestre :
-    1. Recherche dans le corpus sain
-    2. Génération de réponse citée
-    3. Récupération quarantaine
-    4. Finalisation rapport
+    Agent principal avec boucle de décision LLM (tool use).
+    Orchestre : recherche → génération → citations → quarantaine → rapport final.
     """
 
     def __init__(
@@ -45,69 +204,174 @@ class ReneLaTaupeAgent:
         corpus_store: CorpusStore,
         report_store: ReportStore,
         config: AgentConfig | None = None,
+        trace_callback: Callable[[ToolCallTrace], None] | None = None,
     ):
         self.llm = llm_client
         self.corpus_store = corpus_store
         self.report_store = report_store
         self.config = config or AgentConfig()
+        self.trace_callback = trace_callback
+        self._traces: list[ToolCallTrace] = []
 
     def run(self, corpus_id: str, question: str) -> Report:
         """
-        Exécute le happy path complet pour une question sur un corpus.
+        Exécute la boucle d'agent complète pour une question sur un corpus.
         Retourne le rapport final persisté.
         """
         logger.info(f"Démarrage agent corpus={corpus_id} question={question[:80]}")
+        self._traces.clear()
 
-        # 1. Recherche dans le corpus SAIN uniquement
-        hits = search_corpus(question, self.config.max_search_results, corpus_id, self.corpus_store)
-        logger.info(f"Recherche: {len(hits)} hits trouvés")
+        messages: list[dict] = [
+            {"role": "user", "content": f"Corpus ID: {corpus_id}\nQuestion: {question}"}
+        ]
 
-        # 2. Génération de la réponse basée UNIQUEMENT sur les hits
-        if not hits:
-            answer_text = "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus."
-            cited_answer = CitedAnswer(answer=answer_text, citations=[])
-        else:
-            answer_text = self._generate_answer(question, hits)
-            cited_answer = cite_sources(answer_text, hits)
+        system_prompt = SYSTEM_PROMPT
+        collected_hits: list[DocHit] = []
+        final_answer: str | None = None
+        cited_answer: CitedAnswer | None = None
+        quarantine: list = []
 
-        # 3. Récupération de la quarantaine pour le rapport
-        quarantine = list_quarantine(corpus_id, self.corpus_store)
-        logger.info(f"Quarantaine: {len(quarantine)} entrées")
+        for turn in range(1, self.config.max_tool_turns + 1):
+            try:
+                kwargs = {
+                    "model": self.config.model,
+                    "max_tokens": self.config.max_tokens,
+                    "system": system_prompt,
+                    "tools": TOOL_DEFINITIONS,
+                    "messages": messages,
+                }
+                if self.config.temperature > 0:
+                    kwargs["temperature"] = self.config.temperature
+                response = self.llm.messages.create(**kwargs)
+            except anthropic.APIError as e:
+                logger.error(f"Erreur API LLM tour {turn}: {e}")
+                raise AgentLoopError(f"Erreur appel LLM: {e}") from e
 
-        # 4. Finalisation du rapport (SEUL effet de bord)
+            # Traiter la réponse
+            tool_uses = [block for block in response.content if block.type == "tool_use"]
+            text_blocks = [block for block in response.content if block.type == "text"]
+
+            # Ajouter la réponse de l'assistant à l'historique
+            messages.append({"role": "assistant", "content": response.content})
+
+            if not tool_uses:
+                # LLM a répondu sans appeler d'outil
+                if text_blocks:
+                    final_answer = text_blocks[0].text
+                    logger.info(f"Réponse finale sans outil (tour {turn}): {final_answer[:100]}...")
+                break
+
+            # Exécuter chaque outil demandé
+            tool_results = []
+            for tool_use in tool_uses:
+                trace = self._execute_tool(tool_use, turn, corpus_id)
+                self._traces.append(trace)
+                if self.trace_callback:
+                    self.trace_callback(trace)
+
+                if trace.error is not None:
+                    content = [{"type": "text", "text": f"ERREUR: {trace.error}"}]
+                else:
+                    content = [{"type": "text", "text": json.dumps(trace.result, ensure_ascii=False)}]
+
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use.id,
+                    "content": content,
+                    "is_error": trace.error is not None,
+                })
+
+            if not tool_results:
+                break
+
+            # Ajouter les résultats d'outils à l'historique
+            messages.append({"role": "user", "content": tool_results})
+
+            # Collecter les hits pour citation finale
+            for tool_use, trace in zip(tool_uses, self._traces[-len(tool_results):]):
+                raw = getattr(trace, '_raw_result', None)
+                if tool_use.name == "search_corpus" and raw:
+                    collected_hits.extend(raw)
+                elif tool_use.name == "cite_sources" and raw:
+                    cited_answer = raw
+                elif tool_use.name == "list_quarantine" and raw:
+                    quarantine = raw
+                elif tool_use.name == "finalize_report" and raw:
+                    logger.info(f"Rapport finalisé: {raw.report_id}")
+                    raw.question = question
+                    return raw
+
+        # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes
+        if cited_answer is None and final_answer:
+            cited_answer = cite_sources(final_answer, collected_hits)
+        elif cited_answer is None:
+            cited_answer = cite_sources(
+                "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus.",
+                []
+            )
+
+        if not quarantine:
+            quarantine = list_quarantine(corpus_id, self.corpus_store)
+
         report = finalize_report(corpus_id, cited_answer, quarantine, self.report_store)
-        report.question = question  # compléter la question
-        logger.info(f"Rapport finalisé: {report.report_id}")
-
+        report.question = question
+        logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
 
-    def _generate_answer(self, question: str, hits: list[DocHit]) -> str:
-        """Génère la réponse en langage naturel basée sur les hits."""
-        hits_text = "\n\n".join(
-            f"[DOC:{h.doc_id} CHUNK:{h.chunk_id}] {h.text}"
-            for h in hits
+    def _execute_tool(self, tool_use: anthropic.types.ToolUseBlock, turn: int, corpus_id: str) -> ToolCallTrace:
+        """Exécute un outil avec traçage et gestion d'erreurs."""
+        tool_name = tool_use.name
+        args = tool_use.input
+        start_time = time.perf_counter()
+
+        trace = ToolCallTrace(
+            turn=turn,
+            tool_name=tool_name,
+            arguments=args,
         )
 
-        response = self.llm.messages.create(
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": ANSWER_GENERATION_PROMPT.format(
-                    question=question,
-                    hits=hits_text,
-                )}
-            ],
-        )
-        # Anthropic response: content is a list of blocks, extract text from TextBlock
-        text_parts = []
-        for block in response.content:
-            if hasattr(block, "text"):
-                text_parts.append(block.text)
-        return "".join(text_parts).strip()
+        logger.info(f"[TOOL CALL] tour={turn} tool={tool_name} args={json.dumps(args, ensure_ascii=False)}")
 
+        try:
+            impl = TOOL_IMPL.get(tool_name)
+            if impl is None:
+                raise ToolExecutionError(tool_name, f"Outil inconnu: {tool_name}")
 
-# ─── Fonction helper pour test standalone ───
+            # Injecter corpus_id pour search_corpus si manquant
+            if tool_name == "search_corpus" and "corpus_id" not in args:
+                args = {**args, "corpus_id": corpus_id}
+
+            result = impl(args, self.corpus_store if tool_name != "finalize_report" else self.report_store)
+
+            # Conserver l'objet brut pour usage interne
+            trace._raw_result = result
+
+            # Convertir en types sérialisables pour le LLM
+            if isinstance(result, list):
+                serializable = [r.model_dump() if hasattr(r, "model_dump") else r for r in result]
+            elif hasattr(result, "model_dump"):
+                serializable = result.model_dump()
+            else:
+                serializable = result
+
+            trace.result = serializable
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            trace.duration_ms = duration_ms
+
+            logger.info(f"[TOOL RESULT] tour={turn} tool={tool_name} duration_ms={duration_ms:.1f} result_type={type(serializable).__name__}")
+            return trace
+
+        except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            trace.duration_ms = duration_ms
+            trace.error = str(e)
+            logger.error(f"[TOOL ERROR] tour={turn} tool={tool_name} duration_ms={duration_ms:.1f} error={e}")
+            return trace
+
+    def get_traces(self) -> list[ToolCallTrace]:
+        """Retourne la liste complète des traces d'appels d'outils."""
+        return self._traces.copy()
+
 
 def create_test_agent() -> ReneLaTaupeAgent:
     """Crée un agent avec stores en mémoire pour tests locaux."""
