@@ -4,5 +4,3 @@ anthropic
 pydantic
 pypdf
 python-docx
-tenacity
-prometheus-client

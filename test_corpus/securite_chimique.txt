@@ -1,0 +1,28 @@
+GUIDE DE SÉCURITÉ CHIMIQUE - ENTREPÔT A3
+
+1. STOCKAGE DES PRODUITS DANGEREUX
+Les produits chimiques dangereux doivent être stockés dans des armoires ventilées conformes à la norme NF EN 14470-1.
+- Acides (sulfurique, chlorhydrique, nitrique) : armoire acides, bac de rétention obligatoire
+- Bases (soude, potasse) : armoire bases, séparées des acides
+- Solvants inflammables (acétone, éthanol, toluène) : armoire ignifuge 90 min, ventilation forcée
+- Oxydants (peroxydes, nitrates) : stockage séparé, loin de toute matière combustible
+
+2. ÉQUIPEMENTS DE PROTECTION INDIVIDUELLE (EPI)
+Le port des EPI suivants est OBLIGATOIRE lors de toute manipulation :
+- Gants nitrile (épaisseur ≥ 0,4 mm) pour produits corrosifs
+- Lunettes de protection à coques latérales (norme EN 166)
+- Blouse coton à manches longues (fermée)
+- Chaussures fermées, antidérapantes, résistantes aux produits chimiques
+- Masque FFP3 si risque d'aérosols ou vapeurs
+
+3. ÉTIQUETAGE ET TRAÇABILITÉ
+Tout contenant doit porter une étiquette lisible avec :
+- Nom du produit (nom chimique + nom commercial)
+- Pictogrammes CLP (SGH) correspondants
+- Mentions de danger (H) et conseils de prudence (P)
+- Date d'ouverture et numéro de lot
+- Responsable du stockage
+
+4. FICHE DE DONNÉES DE SÉCURITÉ (FDS)
+Les FDS à jour (version < 3 ans) doivent être accessibles à moins de 10 m du stockage.
+Consulter la section 7 (manipulation/stockage) et 8 (contrôles d'exposition/EPI) avant toute opération.

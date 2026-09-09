@@ -1,5 +1,5 @@
 # Barrière de détection d'injection — René LA TAUPE (Yo)
-# Palier 4 : timeout, retry, mode dégradé (heuristique locale si LLM KO).
+# Palier 4 : timeout, retry, fallback heuristique si LLM KO.
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ class InjectionDetector:
         self.max_retries = max_retries
 
     def _call_llm_with_retry(self, messages: list[dict]) -> str:
-        """Appel LLM avec retry et timeout."""
+        """Appel LLM avec retry (timeout géré par le client)."""
         last_error = None
 
         for attempt in range(self.max_retries + 1):
@@ -155,7 +155,6 @@ class InjectionDetector:
                     max_tokens=1000,
                     system=DETECTION_SYSTEM_PROMPT,
                     messages=messages,
-                    timeout=self.timeout_seconds,
                 )
                 content = response.content[0].text if response.content else "{}"
                 return content
@@ -206,7 +205,7 @@ class InjectionDetector:
 
         except Exception as e:
             logger.error(f"Erreur détection LLM doc={doc_id}: {e}")
-            log_error("detection.llm_failed", e, doc_id=doc_id, text_len=len(text))
+            log_error("detection.llm_failed", error_type=type(e).__name__, error=str(e), doc_id=doc_id, text_len=len(text))
 
             # MODE DÉGRADÉ : fallback heuristique
             logger.warning(f"Basculement mode heuristique pour doc={doc_id}")

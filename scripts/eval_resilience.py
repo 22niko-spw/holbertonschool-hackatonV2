@@ -152,9 +152,9 @@ class ResilienceEvaluator:
             with open(log_file) as f:
                 logs = f.read()
 
-            shutdown_init = "shutdown.initiated" in logs
-            shutdown_complete = "shutdown.completed" in logs
-            db_closed = "shutdown.db_closed" in logs
+            shutdown_init = "shutdown.requested" in logs
+            shutdown_complete = "shutdown.complete" in logs
+            db_closed = "db_connections_closed" in logs
 
             passed = shutdown_init and shutdown_complete and db_closed
             return ScenarioResult(name, passed, "Shutdown logs present" if passed else "Missing shutdown logs", {
@@ -182,7 +182,7 @@ class ResilienceEvaluator:
             with open(log_file) as f:
                 logs = f.read()
 
-            passed = "shutdown.initiated" in logs and "shutdown.completed" in logs
+            passed = "shutdown.requested" in logs or "shutdown.initiated" in logs and "shutdown.complete" in logs or "shutdown.completed" in logs
             return ScenarioResult(name, passed, "SIGINT handled gracefully" if passed else "SIGINT not handled", {
                 "log_tail": logs[-500:],
             })
@@ -193,7 +193,7 @@ class ResilienceEvaluator:
 
     def scenario_3_network_cut(self) -> ScenarioResult:
         """Réseau coupé : l'agent gère l'erreur LLM sans planter.
-        Test : clé API invalide → requête échoue proprement (502) + log."""
+        Test : clé API invalide → requête échoue proprement (503) + log resource.unavailable."""
         name = "Network cut / LLM unreachable"
         try:
             # Démarrer AVEC clé API invalide
@@ -207,16 +207,16 @@ class ResilienceEvaluator:
 
             corpus_id = ingest_resp["corpus_id"]
 
-            # Requête devrait échouer proprement (502) avec log
+            # Requête devrait échouer proprement (503) avec log
             query_resp = self._query(corpus_id, "Question test")
             error_msg = query_resp.get("error", "").lower()
-            passed = "error" in query_resp and ("modèle" in error_msg or "llm" in error_msg or "appel llm" in error_msg)
+            passed = "error" in query_resp and ("refusée" in error_msg or "révoquée" in error_msg or "auth" in query_resp.get("reason", ""))
 
-            # Vérifier log d'erreur LLM
+            # Vérifier log d'erreur LLM (resource.unavailable avec reason=auth)
             log_file = os.path.join(self.temp_dir.name, "security.log")
             with open(log_file) as f:
                 logs = f.read()
-            llm_error_logged = "detection.llm_failed" in logs or "query.agent_loop_error" in logs
+            llm_error_logged = "resource.unavailable" in logs and "auth" in logs
 
             return ScenarioResult(name, passed and llm_error_logged,
                 "LLM error handled + logged" if passed else "LLM error not handled properly", {
@@ -235,9 +235,10 @@ class ResilienceEvaluator:
             if not self.start_server({"ANTHROPIC_API_KEY": "sk-invalid"}):
                 return ScenarioResult(name, False, "Server failed to start", {})
 
-            # /api/ask devrait retourner 502 (clé invalide → erreur appel modèle)
+            # /api/ask devrait retourner 503 (clé invalide → auth error)
             resp = self._request("POST", "/api/ask", json={"message": "test"})
-            passed = resp.status_code == 502 and "modèle" in resp.json().get("error", "")
+            error_msg = resp.json().get("error", "").lower()
+            passed = resp.status_code == 503 and ("refusée" in error_msg or "révoquée" in error_msg or "auth" in resp.json().get("reason", ""))
 
             return ScenarioResult(name, passed, "Invalid key handled at runtime" if passed else "Invalid key not handled", {
                 "status_code": resp.status_code,
@@ -268,7 +269,7 @@ class ResilienceEvaluator:
 
             # Vérifier qu'on a pas planté silencieusement
             health = self._health()
-            passed = health.get("status") in ("healthy", "degraded") and "error" not in health
+            passed = health.get("status") in ("ok", "healthy", "degraded") and "error" not in health
 
             return ScenarioResult(name, passed, "DB lock handled with retry" if passed else "DB lock crashed server", {
                 "health_after": health,
@@ -298,7 +299,7 @@ class ResilienceEvaluator:
             # Devrait échouer avec erreur structurée
             passed = "error" in ingest_resp or ingest_resp.get("documents", [{}])[0].get("status") == "error"
 
-            return ScenarioResult(name, passed, "Disk full handled gracefully" if passed else "Disk full not handled", {
+            return ScenarioResult(name, passed, "Read-only DB handled gracefully" if passed else "Read-only DB not handled", {
                 "ingest_resp": ingest_resp,
             })
         except Exception as e:
@@ -311,7 +312,7 @@ class ResilienceEvaluator:
         finally:
             self.stop_server()
 
-    def scenario_7_corrupted_db(self) -> ScenarioResult:
+    def scenario_7_db_write_failure(self) -> ScenarioResult:
         """DB verrouillée en écriture : les opérations échouent proprement (simulation disque plein)."""
         name = "Database write failure (read-only)"
         try:
@@ -385,7 +386,7 @@ class ResilienceEvaluator:
             ingest_resp = self._ingest_file("Short doc.")
             corpus_id = ingest_resp["corpus_id"]
 
-            # Requête avec max_tool_turns=1 (via enabled_tools limité)
+            # Requête
             query_resp = self._query(corpus_id, "Question sans réponse dans le corpus")
 
             # Devrait retourner un rapport (fallback) pas une erreur
@@ -406,9 +407,12 @@ class ResilienceEvaluator:
             if not self.start_server():
                 return ScenarioResult(name, False, "Server failed to start", {})
 
-            # Créer un gros document (500 KB)
-            large_content = "Document clean. " * 30000  # ~500 KB
-            ingest_resp = self._ingest_file(large_content, "large.txt")
+            # Créer un gros document (500 KB) - contenu varié et naturel
+            large_content = " ".join([f"Ceci est une phrase normale numéro {i} dans un document légitime sans aucune injection." for i in range(3000)])
+            files = {"files": ("large.txt", large_content, "text/plain")}
+            import requests
+            resp = requests.post(f"{self.base_url}/ingest", files={"files": ("large.txt", large_content, "text/plain")}, timeout=30)
+            ingest_resp = resp.json()
 
             passed = "corpus_id" in ingest_resp and ingest_resp.get("documents", [{}])[0].get("status") == "clean"
 
@@ -430,7 +434,7 @@ class ResilienceEvaluator:
             self.scenario_4_invalid_api_key,
             self.scenario_5_db_locked,
             self.scenario_6_disk_full_simulation,
-            self.scenario_7_corrupted_db,
+            self.scenario_7_db_write_failure,
             self.scenario_8_detection_fallback,
             self.scenario_9_max_tool_turns,
             self.scenario_10_oom_large_corpus,

@@ -1,5 +1,5 @@
 # Moteur agentique — René LA TAUPE (Yo)
-# Palier 4 : timeout config, circuit breaker, timestamp ISO, audit log.
+# Palier 3 : Boucle de décision LLM avec tool use réel, traçage, gestion d'erreurs.
 
 from __future__ import annotations
 
@@ -7,14 +7,12 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any, Callable
 
 import anthropic
 
 from rene_la_taupe.prompts import ANSWER_GENERATION_PROMPT, SYSTEM_PROMPT
 from rene_la_taupe.schemas import CitedAnswer, DocHit, Report
-from rene_la_taupe.security_log import log_audit
 from rene_la_taupe.tools import (
     CorpusStore,
     ReportStore,
@@ -36,10 +34,7 @@ class AgentConfig:
     max_search_results: int = 5
     max_tokens: int = 1500
     max_tool_turns: int = 10
-    enabled_tools: list[str] | None = None
-    llm_timeout_seconds: float = 30.0
-    circuit_breaker_threshold: int = 3  # échecs consécutifs avant ouverture
-    circuit_breaker_timeout_seconds: float = 60.0  # temps avant retry
+    enabled_tools: list[str] | None = None  # None = tous les outils actifs
 
 
 @dataclass
@@ -51,7 +46,7 @@ class ToolCallTrace:
     result: Any = None
     error: str | None = None
     duration_ms: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="milliseconds"))
+    timestamp: float = field(default_factory=time.time)
 
 
 class ToolExecutionError(Exception):
@@ -66,41 +61,6 @@ class ToolExecutionError(Exception):
 class AgentLoopError(Exception):
     """Erreur dans la boucle d'agent (max tours, LLM error, etc.)."""
     pass
-
-
-class CircuitBreaker:
-    """Circuit breaker simple pour protéger contre les pannes en cascade."""
-
-    def __init__(self, threshold: int = 3, timeout_seconds: float = 60.0):
-        self.threshold = threshold
-        self.timeout_seconds = timeout_seconds
-        self.failure_count = 0
-        self.last_failure_time: float | None = None
-        self._lock = __import__("threading").Lock()
-
-    def record_success(self) -> None:
-        with self._lock:
-            self.failure_count = 0
-            self.last_failure_time = None
-
-    def record_failure(self) -> None:
-        with self._lock:
-            self.failure_count += 1
-            self.last_failure_time = time.time()
-
-    def is_open(self) -> bool:
-        with self._lock:
-            if self.failure_count < self.threshold:
-                return False
-            if self.last_failure_time is None:
-                return True
-            # Timeout écoulé → half-open (on laisse passer une requête)
-            return (time.time() - self.last_failure_time) < self.timeout_seconds
-
-    def reset(self) -> None:
-        with self._lock:
-            self.failure_count = 0
-            self.last_failure_time = None
 
 
 TOOL_DEFINITIONS = [
@@ -229,12 +189,7 @@ TOOL_IMPL: dict[str, Callable] = {
     "list_quarantine": lambda args, store: list_quarantine(args["corpus_id"], store),
     "read_quarantine_excerpt": lambda args, store: read_quarantine_excerpt(args["doc_id"], args["chunk_id"], store),
     "cite_sources": lambda args, store: cite_sources(args["answer"], [DocHit(**h) for h in args["hits"]]),
-    "finalize_report": lambda args, store: finalize_report(
-        args["corpus_id"],
-        CitedAnswer(**args["answer"]),
-        [__import__("rene_la_taupe.schemas", fromlist=["QuarantineEntry"]).QuarantineEntry(**q) for q in args["quarantine"]],
-        store,
-    ),
+    "finalize_report": lambda args, store: finalize_report(args["corpus_id"], CitedAnswer(**args["answer"]), [__import__("rene_la_taupe.schemas", fromlist=["QuarantineEntry"]).QuarantineEntry(**q) for q in args["quarantine"]], store),  # type: ignore[arg-type]
 }
 
 
@@ -242,7 +197,6 @@ class ReneLaTaupeAgent:
     """
     Agent principal avec boucle de décision LLM (tool use).
     Orchestre : recherche → génération → citations → quarantaine → rapport final.
-    Palier 4 : timeout, circuit breaker, audit log structuré.
     """
 
     def __init__(
@@ -259,17 +213,13 @@ class ReneLaTaupeAgent:
         self.config = config or AgentConfig()
         self.trace_callback = trace_callback
         self._traces: list[ToolCallTrace] = []
-        self._circuit_breaker = CircuitBreaker(
-            threshold=self.config.circuit_breaker_threshold,
-            timeout_seconds=self.config.circuit_breaker_timeout_seconds,
-        )
 
     def run(self, corpus_id: str, question: str) -> Report:
         """
         Exécute la boucle d'agent complète pour une question sur un corpus.
         Retourne le rapport final persisté.
         """
-        log_audit("agent.start", corpus_id=corpus_id, question=question[:100])
+        logger.info(f"Démarrage agent corpus={corpus_id} question={question[:80]}")
         self._traces.clear()
 
         messages: list[dict] = [
@@ -282,36 +232,26 @@ class ReneLaTaupeAgent:
         cited_answer: CitedAnswer | None = None
         quarantine: list = []
 
-        # Filtrer outils activés
         if self.config.enabled_tools is None:
             active_tools = TOOL_DEFINITIONS
         else:
             active_tools = [t for t in TOOL_DEFINITIONS if t["name"] in self.config.enabled_tools]
 
         for turn in range(1, self.config.max_tool_turns + 1):
-            if self._circuit_breaker.is_open():
-                log_audit("agent.circuit_breaker_open", corpus_id=corpus_id, turn=turn)
-                raise AgentLoopError("Circuit breaker ouvert : trop d'échecs consécutifs")
-
             try:
                 kwargs = {
                     "model": self.config.model,
                     "max_tokens": self.config.max_tokens,
                     "system": system_prompt,
                     "messages": messages,
-                    "timeout": self.config.llm_timeout_seconds,
                 }
                 if active_tools:
                     kwargs["tools"] = active_tools
                 if self.config.temperature > 0:
                     kwargs["temperature"] = self.config.temperature
                 response = self.llm.messages.create(**kwargs)
-                self._circuit_breaker.record_success()
-
             except anthropic.APIError as e:
-                self._circuit_breaker.record_failure()
                 logger.error(f"Erreur API LLM tour {turn}: {e}")
-                log_audit("agent.llm_error", corpus_id=corpus_id, turn=turn, error=str(e))
                 raise AgentLoopError(f"Erreur appel LLM: {e}") from e
 
             # Traiter la réponse
@@ -325,7 +265,7 @@ class ReneLaTaupeAgent:
                 # LLM a répondu sans appeler d'outil
                 if text_blocks:
                     final_answer = text_blocks[0].text
-                    log_audit("agent.final_answer_no_tool", corpus_id=corpus_id, turn=turn, answer_len=len(final_answer))
+                    logger.info(f"Réponse finale sans outil (tour {turn}): {final_answer[:100]}...")
                 break
 
             # Exécuter chaque outil demandé
@@ -364,7 +304,7 @@ class ReneLaTaupeAgent:
                 elif tool_use.name == "list_quarantine" and raw:
                     quarantine = raw
                 elif tool_use.name == "finalize_report" and raw:
-                    log_audit("agent.report_finalized", corpus_id=corpus_id, report_id=raw.report_id)
+                    logger.info(f"Rapport finalisé: {raw.report_id}")
                     raw.question = question
                     return raw
 
@@ -382,11 +322,11 @@ class ReneLaTaupeAgent:
 
         report = finalize_report(corpus_id, cited_answer, quarantine, self.report_store)
         report.question = question
-        log_audit("agent.report_finalized_fallback", corpus_id=corpus_id, report_id=report.report_id)
+        logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
 
     def _execute_tool(self, tool_use: anthropic.types.ToolUseBlock, turn: int, corpus_id: str) -> ToolCallTrace:
-        """Exécute un outil avec traçage, audit log et gestion d'erreurs."""
+        """Exécute un outil avec traçage et gestion d'erreurs."""
         tool_name = tool_use.name
         args = tool_use.input
         start_time = time.perf_counter()
@@ -397,7 +337,7 @@ class ReneLaTaupeAgent:
             arguments=args,
         )
 
-        log_audit("tool.call", corpus_id=corpus_id, turn=turn, tool=tool_name, args=args)
+        logger.info(f"[TOOL CALL] tour={turn} tool={tool_name} args={json.dumps(args, ensure_ascii=False)}")
 
         try:
             impl = TOOL_IMPL.get(tool_name)
@@ -425,14 +365,14 @@ class ReneLaTaupeAgent:
             duration_ms = (time.perf_counter() - start_time) * 1000
             trace.duration_ms = duration_ms
 
-            log_audit("tool.result", corpus_id=corpus_id, turn=turn, tool=tool_name, duration_ms=duration_ms, result_type=type(serializable).__name__)
+            logger.info(f"[TOOL RESULT] tour={turn} tool={tool_name} duration_ms={duration_ms:.1f} result_type={type(serializable).__name__}")
             return trace
 
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
             trace.duration_ms = duration_ms
             trace.error = str(e)
-            log_audit("tool.error", corpus_id=corpus_id, turn=turn, tool=tool_name, duration_ms=duration_ms, error=str(e))
+            logger.error(f"[TOOL ERROR] tour={turn} tool={tool_name} duration_ms={duration_ms:.1f} error={e}")
             return trace
 
     def get_traces(self) -> list[ToolCallTrace]:
