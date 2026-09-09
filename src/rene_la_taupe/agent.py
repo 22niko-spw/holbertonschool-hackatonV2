@@ -34,6 +34,7 @@ class AgentConfig:
     max_search_results: int = 5
     max_tokens: int = 1500
     max_tool_turns: int = 10
+    enabled_tools: list[str] | None = None  # None = tous les outils actifs
 
 
 @dataclass
@@ -231,15 +232,21 @@ class ReneLaTaupeAgent:
         cited_answer: CitedAnswer | None = None
         quarantine: list = []
 
+        if self.config.enabled_tools is None:
+            active_tools = TOOL_DEFINITIONS
+        else:
+            active_tools = [t for t in TOOL_DEFINITIONS if t["name"] in self.config.enabled_tools]
+
         for turn in range(1, self.config.max_tool_turns + 1):
             try:
                 kwargs = {
                     "model": self.config.model,
                     "max_tokens": self.config.max_tokens,
                     "system": system_prompt,
-                    "tools": TOOL_DEFINITIONS,
                     "messages": messages,
                 }
+                if active_tools:
+                    kwargs["tools"] = active_tools
                 if self.config.temperature > 0:
                     kwargs["temperature"] = self.config.temperature
                 response = self.llm.messages.create(**kwargs)
