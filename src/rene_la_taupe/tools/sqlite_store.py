@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import threading
@@ -74,8 +75,35 @@ class SqliteDatabase:
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
         self._local = threading.local()
+        self._all_conns: list[sqlite3.Connection] = []
+        self._conns_lock = threading.Lock()
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+        self._inode = self._current_inode()
+
+    @property
+    def db_path(self) -> str:
+        return self._db_path
+
+    def _current_inode(self) -> int | None:
+        try:
+            return os.stat(self._db_path).st_ino
+        except OSError:
+            return None
+
+    def file_status(self) -> str:
+        """'ok' | 'missing' | 'replaced'.
+
+        Une connexion SQLite ouverte survit à la suppression du fichier (le
+        descripteur reste valide sur l'inode d'origine) : sans cette
+        vérification, la base peut avoir disparu sans que rien ne le signale.
+        """
+        inode = self._current_inode()
+        if inode is None:
+            return "missing"
+        if self._inode is not None and inode != self._inode:
+            return "replaced"
+        return "ok"
 
     def _connect(self) -> sqlite3.Connection:
         if not hasattr(self._local, "conn"):
@@ -83,10 +111,29 @@ class SqliteDatabase:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             self._local.conn = conn
+            with self._conns_lock:
+                self._all_conns.append(conn)
         return self._local.conn  # type: ignore[no-any-return]
 
     def connection(self) -> sqlite3.Connection:
         return self._connect()
+
+    def ping(self) -> None:
+        """Vérifie que la base répond. Lève sqlite3.Error si la ressource a disparu."""
+        self.connection().execute("SELECT 1").fetchone()
+
+    def close_all(self) -> int:
+        """Ferme toutes les connexions ouvertes, quel que soit le thread. Retourne le nombre fermé."""
+        with self._conns_lock:
+            conns, self._all_conns = self._all_conns, []
+        closed = 0
+        for conn in conns:
+            try:
+                conn.close()
+                closed += 1
+            except sqlite3.Error:
+                pass
+        return closed
 
 
 class SqliteCorpusStore(CorpusStore):
