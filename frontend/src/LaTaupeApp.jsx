@@ -524,15 +524,12 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-2xl flex-col items-center justify-center px-6 py-20">
-        <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-xl border ${T.chip}`}>
-          <ShieldAlert size={22} className={T.textMuted} strokeWidth={1.75} />
-        </div>
+      <main className="mx-auto flex max-w-2xl flex-col items-center justify-center px-6 pt-10 pb-20">
         <h2 className={`text-[22px] font-semibold tracking-tight text-center ${T.textPrimary}`}>
-          Analyse ton corpus documentaire
+          René analyse ton corpus documentaire
         </h2>
         <p className={`mt-2 mb-8 text-center text-[13.5px] leading-relaxed ${T.textMuted}`}>
-          Dépose tes fichiers, pose ta question. La Taupe isole les tentatives
+          Dépose tes fichiers, pose ta question. René isole les tentatives
           d'injection avant de synthétiser les documents sains. Sans fichier,
           ta question part directement vers le modèle.
         </p>
