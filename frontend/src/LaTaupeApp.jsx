@@ -26,6 +26,7 @@ import {
   Undo2,
   Settings,
   Wrench,
+  ChevronDown,
 } from "lucide-react";
 import TaupeFrame from "./components/taupe/TaupeFrame";
 import TaupeLogo from "./components/TaupeLogo";
@@ -851,11 +852,20 @@ function PrettyValue({ value }) {
 function ToolTraceEntry({ entry }) {
   const T = useT();
   const hasError = Boolean(entry.error);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className={`rounded-lg border p-4 ${hasError ? T.roseCard : T.card}`}>
-      <div className="flex items-center justify-between gap-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
         <div className="flex min-w-0 items-center gap-2">
+          <ChevronDown
+            size={14}
+            className={`shrink-0 transition-transform ${T.textFainter} ${open ? "rotate-0" : "-rotate-90"}`}
+          />
           <span className={`shrink-0 text-[11px] font-mono ${T.textFainter}`}>#{entry.turn}</span>
           <Terminal size={13} className={`shrink-0 ${hasError ? T.roseText : T.textFaint}`} />
           <span className={`truncate font-mono text-[13px] ${T.textSecondary}`}>{entry.tool_name}</span>
@@ -872,8 +882,9 @@ function ToolTraceEntry({ entry }) {
           )}
           <span className={`font-mono text-[11px] ${T.textFainter}`}>{entry.duration_ms.toFixed(1)} ms</span>
         </div>
-      </div>
+      </button>
 
+      {open && (
       <div className="mt-3 space-y-2.5">
         <div>
           <p className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Arguments</p>
@@ -896,6 +907,7 @@ function ToolTraceEntry({ entry }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
