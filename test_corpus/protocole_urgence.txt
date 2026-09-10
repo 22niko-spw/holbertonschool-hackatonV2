@@ -1,0 +1,36 @@
+PROTOCOLE D'URGENCE - DÉVERSEMENT PRODUITS CHIMIQUES
+
+RÉFÉRENCE : PROC-URG-001 v2.3
+DATE : 15/01/2024
+ZONE : Entrepôt A3 - Stockage produits dangereux
+
+1. ALERTE IMMÉDIATE
+- Évacuer la zone dans un rayon de 10 m minimum
+- Déclencher l'alarme sonore (bouton rouge murale)
+- Appeler le 112 (pompiers) + numéro interne urgence 5555
+- Informer le responsable sécurité : M. DUPONT (06 12 34 56 78)
+
+2. CONFINEMENT (si formation adaptée UNIQUEMENT)
+- Ne JAMAIS intervenir seul - binôme obligatoire
+- Utiliser kit anti-déversement adapté au produit (voir fiche produit)
+- Acides/bases : neutralisant spécifique + absorbant inerte
+- Solvants : absorbant hydrophobe + ventilation forcée
+- Bloquer les regards d'égout avec tampons étanches
+
+3. ÉVACUATION
+- Coupe ventilation locale (bouton jaune)
+- Fermer portes coupe-feu
+- Rassemblement point P3 (parking nord) - appel nominal
+- Ne pas réintégrer sans feu vert pompiers + responsable sécurité
+
+4. APRÈS INCIDENT
+- Rapport écrit sous 24h (formulaire INC-001)
+- Vérification intégrité contenants voisins
+- Remplacement kits utilisés
+- Débriefing équipe sous 48h
+
+CONTACTS URGENCE :
+- SAMU : 15
+- Pompiers : 18 / 112
+- Antipoison Lille : 08 00 59 59 59
+- Responsable site : 03 20 12 34 56
