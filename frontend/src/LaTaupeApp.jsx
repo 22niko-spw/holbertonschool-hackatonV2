@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import {
   ShieldAlert,
-  ShieldCheck,
   FileText,
   Upload,
   CheckCircle2,
@@ -29,6 +28,7 @@ import {
   Wrench,
 } from "lucide-react";
 import TaupeFrame from "./components/taupe/TaupeFrame";
+import TaupeLogo from "./components/TaupeLogo";
 
 // ---------------------------------------------------------------------------
 // Theme tokens
@@ -507,7 +507,7 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
         <div className="mx-auto max-w-[1400px] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`flex h-8 w-8 items-center justify-center rounded-md border ${T.chip}`}>
-              <ShieldCheck size={16} className={T.textMuted} strokeWidth={2} />
+              <TaupeLogo size={28} theme={dark ? "dark" : "light"} decorative />
             </div>
             <h1 className={`text-[14.5px] font-semibold tracking-tight ${T.textPrimary}`}>
               LA TAUPE
@@ -931,7 +931,7 @@ function Dashboard({
                 <Undo2 size={14} className={T.textMuted} strokeWidth={2} />
               </button>
               <div className={`flex h-8 w-8 items-center justify-center rounded-md border ${T.chip}`}>
-                <ShieldCheck size={16} className={T.textMuted} strokeWidth={2} />
+                <TaupeLogo size={28} theme={dark ? "dark" : "light"} decorative />
               </div>
               <h1 className={`text-[14.5px] font-semibold tracking-tight ${T.textPrimary}`}>
                 LA TAUPE
