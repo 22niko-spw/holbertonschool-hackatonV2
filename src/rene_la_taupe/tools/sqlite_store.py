@@ -9,16 +9,14 @@ import os
 import re
 import sqlite3
 import threading
-import time
 from datetime import UTC, datetime
-from typing import Any
 
 from rene_la_taupe.schemas import CitedAnswer, DocHit, DocMeta, QuarantineEntry, Report
-from rene_la_taupe.tools import CorpusStore, ReportStore
 from rene_la_taupe.security_log import log_error
+from rene_la_taupe.tools import CorpusStore, ReportStore
 
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
     TENACITY_AVAILABLE = True
 except ImportError:
     TENACITY_AVAILABLE = False

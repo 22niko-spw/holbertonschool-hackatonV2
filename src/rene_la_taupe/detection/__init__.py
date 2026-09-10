@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+from importlib.util import find_spec
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -15,11 +16,7 @@ from rene_la_taupe.prompts import DETECTION_SYSTEM_PROMPT
 from rene_la_taupe.schemas import QuarantineEntry
 from rene_la_taupe.security_log import log_error
 
-try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-    TENACITY_AVAILABLE = True
-except ImportError:
-    TENACITY_AVAILABLE = False
+TENACITY_AVAILABLE = find_spec("tenacity") is not None
 
 logger = logging.getLogger(__name__)
 

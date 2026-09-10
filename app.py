@@ -10,16 +10,16 @@ import time
 import traceback
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+import anthropic
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, request
 from werkzeug.exceptions import HTTPException
-import anthropic
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from rene_la_taupe import AgentConfig, ReneLaTaupeAgent, InjectionDetector
+from rene_la_taupe import AgentConfig, InjectionDetector, ReneLaTaupeAgent
 from rene_la_taupe.agent import AgentLoopError, ToolExecutionError
 from rene_la_taupe.ingestion import (
     DocumentParseError,
@@ -32,6 +32,8 @@ from rene_la_taupe.ingestion import (
 )
 from rene_la_taupe.security_log import (
     flush as flush_journal,
+)
+from rene_la_taupe.security_log import (
     get_journal_path,
     log_error,
     log_event,
@@ -356,7 +358,7 @@ def ingest():
         if result.suspect:
             quarantine_count += 1
             entries = detector.to_quarantine_entries(doc_id, result)
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             for entry in entries:
                 entry.detected_at = now
             corpus_store.add_quarantine_entries(corpus_id, entries)
