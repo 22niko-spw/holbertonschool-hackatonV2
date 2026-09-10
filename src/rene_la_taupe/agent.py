@@ -13,7 +13,7 @@ from typing import Any
 import anthropic
 
 from rene_la_taupe.prompts import SYSTEM_PROMPT
-from rene_la_taupe.schemas import CitedAnswer, DocHit, Report
+from rene_la_taupe.schemas import CitedAnswer, CostUsage, DocHit, Report
 from rene_la_taupe.tools import (
     CorpusStore,
     ReportStore,
@@ -214,6 +214,7 @@ class ReneLaTaupeAgent:
         self.config = config or AgentConfig()
         self.trace_callback = trace_callback
         self._traces: list[ToolCallTrace] = []
+        self._usage: CostUsage = CostUsage()
 
     def run(self, corpus_id: str, question: str) -> Report:
         """
@@ -222,6 +223,7 @@ class ReneLaTaupeAgent:
         """
         logger.info(f"Démarrage agent corpus={corpus_id} question={question[:80]}")
         self._traces.clear()
+        self._usage = CostUsage()
 
         messages: list[dict] = [
             {"role": "user", "content": f"Corpus ID: {corpus_id}\nQuestion: {question}"}
@@ -254,6 +256,12 @@ class ReneLaTaupeAgent:
             except anthropic.APIError as e:
                 logger.error(f"Erreur API LLM tour {turn}: {e}")
                 raise AgentLoopError(f"Erreur appel LLM: {e}") from e
+
+            api_usage = getattr(response, "usage", None)
+            if api_usage is not None:
+                self._usage.input_tokens += getattr(api_usage, "input_tokens", 0) or 0
+                self._usage.output_tokens += getattr(api_usage, "output_tokens", 0) or 0
+            self._usage.llm_calls += 1
 
             # Traiter la réponse
             tool_uses = [block for block in response.content if block.type == "tool_use"]
@@ -307,9 +315,12 @@ class ReneLaTaupeAgent:
                 elif tool_use.name == "finalize_report" and raw:
                     logger.info(f"Rapport finalisé: {raw.report_id}")
                     raw.question = question
+                    raw.answer.confidence = self._verified_confidence(raw.answer, collected_hits)
                     return raw
 
         # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes
+        if cited_answer is not None:
+            cited_answer.confidence = self._verified_confidence(cited_answer, collected_hits)
         if cited_answer is None and final_answer:
             cited_answer = cite_sources(final_answer, collected_hits)
         elif cited_answer is None:
@@ -325,6 +336,20 @@ class ReneLaTaupeAgent:
         report.question = question
         logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
+
+    @staticmethod
+    def _verified_confidence(cited: CitedAnswer, hits: list[DocHit]) -> float:
+        """Recalcule la confiance depuis les scores de recherche observés.
+
+        Le LLM fournit les citations (et parfois leurs scores) : on ne le croit
+        pas sur parole. Seuls les chunks retournés par search_corpus comptent ;
+        un chunk cité mais jamais retrouvé vaut 0 (extrait possiblement inventé).
+        """
+        if not cited.citations:
+            return 0.0
+        observed = {(h.doc_id, h.chunk_id): h.score for h in hits}
+        scores = [observed.get((c.doc_id, c.chunk_id), 0.0) for c in cited.citations]
+        return min(1.0, max(0.0, sum(scores) / len(scores)))
 
     def _execute_tool(self, tool_use: anthropic.types.ToolUseBlock, turn: int, corpus_id: str) -> ToolCallTrace:
         """Exécute un outil avec traçage et gestion d'erreurs."""
@@ -379,6 +404,19 @@ class ReneLaTaupeAgent:
     def get_traces(self) -> list[ToolCallTrace]:
         """Retourne la liste complète des traces d'appels d'outils."""
         return self._traces.copy()
+
+    @property
+    def last_usage(self) -> CostUsage:
+        """Coût LLM du dernier run (tokens/appels, sans la durée).
+
+        Même motif que get_traces() : la durée est mesurée par l'appelant
+        (route HTTP), qui remplit duration_ms avant de répondre.
+        """
+        return CostUsage(
+            input_tokens=self._usage.input_tokens,
+            output_tokens=self._usage.output_tokens,
+            llm_calls=self._usage.llm_calls,
+        )
 
 
 def create_test_agent() -> ReneLaTaupeAgent:

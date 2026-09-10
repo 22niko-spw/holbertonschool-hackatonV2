@@ -38,7 +38,17 @@ QuarantineEntry = {
 
 CitedAnswer = {
     "answer": str,
-    "citations": list[{"doc_id": str, "chunk_id": str, "span_start": int, "span_end": int}]
+    "citations": list[{"doc_id": str, "chunk_id": str, "span_start": int, "span_end": int}],
+    "confidence": float,  # 0.0-1.0, force probante MOYENNE des hits, REVÉRIFIÉE côté agent
+                          # (jamais les scores auto-déclarés du LLM) ; 0.0 = rien trouvé
+}
+
+CostUsage = {
+    "input_tokens": int,      # mesuré depuis response.usage, jamais deviné
+    "output_tokens": int,
+    "llm_calls": int,
+    "duration_ms": float,     # requête entière côté serveur
+    "estimated_cost_usd": float | null   # barème indicatif app.py, null si modèle inconnu
 }
 
 Report = {

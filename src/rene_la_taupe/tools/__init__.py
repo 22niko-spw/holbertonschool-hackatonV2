@@ -134,6 +134,9 @@ def cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer:
     """
     Attache les citations aux segments de la réponse.
     Version simplifiée : associe chaque hit à une citation span approximative.
+    La confiance reflète la force probante de la récupération (score moyen
+    des hits) : 0.0 sans passage pertinent, pour que l'UI n'affiche jamais
+    une réponse inventée avec assurance.
     """
     from rene_la_taupe.schemas import Citation
 
@@ -149,7 +152,8 @@ def cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer:
             span_start=span_start,
             span_end=span_end,
         ))
-    return CitedAnswer(answer=answer, citations=citations)
+    confidence = sum(h.score for h in hits) / len(hits) if hits else 0.0
+    return CitedAnswer(answer=answer, citations=citations, confidence=min(1.0, max(0.0, confidence)))
 
 
 def finalize_report(

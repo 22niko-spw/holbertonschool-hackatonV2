@@ -14,6 +14,7 @@ from rene_la_taupe.ingestion import (
 from rene_la_taupe.schemas import (
     Citation,
     CitedAnswer,
+    CostUsage,
     DocHit,
     DocMeta,
     QuarantineEntry,
@@ -68,6 +69,7 @@ __all__ = [
     "DetectionResult",
     "DetectionAttempt",
     # Schemas
+    "CostUsage",
     "DocHit",
     "DocMeta",
     "QuarantineEntry",

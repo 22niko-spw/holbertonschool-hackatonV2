@@ -631,10 +631,57 @@ function ErrorCard({ doc }) {
 }
 
 // ---------------------------------------------------------------------------
+// Cost strip (palier 5 — bonus COÛT AFFICHÉ) + confidence badge.
+// Confidence = retrieval strength (mean hit score), 0 = nothing found:
+// the UI must never present an invented answer with assurance.
+// ---------------------------------------------------------------------------
+
+function UsageStrip({ usage }) {
+  const T = useT();
+  if (!usage) return null;
+  const cost = usage.estimated_cost_usd;
+  const items = [
+    `IN ${(usage.input_tokens || 0).toLocaleString("fr-FR")}`,
+    `OUT ${(usage.output_tokens || 0).toLocaleString("fr-FR")}`,
+    `${usage.llm_calls || 0} appel${(usage.llm_calls || 0) > 1 ? "s" : ""} LLM`,
+    `${Math.round(usage.duration_ms || 0).toLocaleString("fr-FR")} ms`,
+    cost == null ? "coût n/a" : `≈ $${cost.toFixed(4)}`,
+  ];
+  return (
+    <div className={`mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3 ${T.card}`}>
+      <span className={`text-[11px] uppercase tracking-wide ${T.textFaint}`}>Coût</span>
+      {items.map((item) => (
+        <span key={item} className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${T.tag}`}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ConfidenceBadge({ confidence }) {
+  if (confidence == null) return null;
+  if (confidence <= 0)
+    return (
+      <Badge tone="rose" icon={AlertTriangle}>
+        NON TROUVÉ
+      </Badge>
+    );
+  if (confidence >= 0.7)
+    return (
+      <Badge tone="emerald" icon={CheckCircle2}>
+        CONFIANCE HAUTE
+      </Badge>
+    );
+  if (confidence >= 0.4) return <Badge tone="amber">CONFIANCE MOYENNE</Badge>;
+  return <Badge tone="neutral">CONFIANCE FAIBLE</Badge>;
+}
+
+// ---------------------------------------------------------------------------
 // Right column: answer + citations
 // ---------------------------------------------------------------------------
 
-function AggregatedSummary({ question, answer, citations, docsById, loading, loadingStage, error }) {
+function AggregatedSummary({ question, answer, citations, confidence, usage, docsById, loading, loadingStage, error }) {
   const T = useT();
   const lines = (answer || "").split("\n");
   const sourceDocIds = [...new Set((citations || []).map((c) => c.doc_id))];
@@ -642,9 +689,12 @@ function AggregatedSummary({ question, answer, citations, docsById, loading, loa
   return (
     <div className={`rounded-lg border p-5 ${T.card}`}>
       <div className={`mb-4 border-b pb-3 ${T.card}`}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className={`text-sm font-medium ${T.textPrimary}`}>Réponse</h2>
-          <Badge tone="neutral">LLM</Badge>
+          <div className="flex items-center gap-1.5">
+            <ConfidenceBadge confidence={confidence} />
+            <Badge tone="neutral">LLM</Badge>
+          </div>
         </div>
         {question ? (
           <p className={`mt-1.5 text-[12px] italic ${T.textMuted}`}>« {question} »</p>
@@ -692,6 +742,7 @@ function AggregatedSummary({ question, answer, citations, docsById, loading, loa
               ))}
             </div>
           )}
+          <UsageStrip usage={usage} />
         </>
       )}
 
@@ -857,6 +908,8 @@ function Dashboard({
   question,
   answer,
   citations,
+  confidence,
+  usage,
   quarantineEntries,
   trace,
   loading,
@@ -1062,6 +1115,8 @@ function Dashboard({
                 question={question}
                 answer={answer}
                 citations={citations}
+                confidence={confidence}
+                usage={usage}
                 docsById={docsById}
                 loading={loading}
                 loadingStage={loadingStage}
@@ -1090,6 +1145,8 @@ export default function LaTaupeApp() {
   const [staged, setStaged] = useState([]);
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState([]);
+  const [answerConfidence, setAnswerConfidence] = useState(null);
+  const [usage, setUsage] = useState(null);
   const [quarantineEntries, setQuarantineEntries] = useState([]);
   const [trace, setTrace] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1130,6 +1187,8 @@ export default function LaTaupeApp() {
     setAskedQuestion(trimmed);
     setAnswer("");
     setCitations([]);
+    setAnswerConfidence(null);
+    setUsage(null);
     setQuarantineEntries([]);
     setTrace([]);
     setError("");
@@ -1150,6 +1209,8 @@ export default function LaTaupeApp() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Erreur inconnue");
         setAnswer(data.reply);
+        setAnswerConfidence(null);
+        setUsage(data.usage || null);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -1197,6 +1258,8 @@ export default function LaTaupeApp() {
 
       setAnswer(report.answer.answer);
       setCitations(report.answer.citations || []);
+      setAnswerConfidence(report.answer?.confidence ?? null);
+      setUsage(report.usage || null);
       setQuarantineEntries(report.quarantine || []);
       setTrace(report.trace || []);
     } catch (err) {
@@ -1213,6 +1276,8 @@ export default function LaTaupeApp() {
     setAskedQuestion("");
     setAnswer("");
     setCitations([]);
+    setAnswerConfidence(null);
+    setUsage(null);
     setQuarantineEntries([]);
     setTrace([]);
     setError("");
@@ -1242,6 +1307,8 @@ export default function LaTaupeApp() {
           question={askedQuestion}
           answer={answer}
           citations={citations}
+          confidence={answerConfidence}
+          usage={usage}
           quarantineEntries={quarantineEntries}
           trace={trace}
           loading={loading}

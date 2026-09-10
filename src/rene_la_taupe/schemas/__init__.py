@@ -38,6 +38,21 @@ class Citation(BaseModel):
 class CitedAnswer(BaseModel):
     answer: str
     citations: list[Citation]
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class CostUsage(BaseModel):
+    """Coût mesuré d'une requête : tokens, appels LLM, durée, estimation $.
+
+    Renseigné depuis response.usage de l'API (jamais deviné). estimated_cost_usd
+    est indicatif (barème codé côté backend) et None si le modèle est inconnu.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    llm_calls: int = 0
+    duration_ms: float = 0.0
+    estimated_cost_usd: float | None = None
 
 
 class Report(BaseModel):
