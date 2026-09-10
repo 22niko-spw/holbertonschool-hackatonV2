@@ -1,0 +1,89 @@
+.taupe-frame {
+  --taupe-size: clamp(160px, 32vw, 224px);
+  --taupe-lighting: brightness(1) saturate(.8);
+  --taupe-shadow: rgba(35, 26, 23, .18);
+  --taupe-focus: #927d70;
+  position: relative;
+  isolation: isolate;
+  padding-top: calc(var(--taupe-size) * .79);
+  overflow: visible;
+}
+
+.taupe-frame[data-theme="dark"],
+:where(.dark, [data-theme="dark"]) .taupe-frame:not([data-theme="light"]) {
+  --taupe-lighting: brightness(1.18) saturate(.65);
+  --taupe-shadow: rgba(216, 206, 190, .19);
+  --taupe-focus: #d6bbaa;
+}
+
+.taupe-frame > .taupe-mascot {
+  appearance: none;
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  width: var(--taupe-size);
+  height: var(--taupe-size);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 46% 46% 16% 16%;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 2px 0 var(--taupe-shadow));
+  touch-action: manipulation;
+}
+
+.taupe-frame .taupe-mascot:focus-visible {
+  outline: 2px solid var(--taupe-focus);
+  outline-offset: 4px;
+}
+
+.taupe-frame .taupe-mascot__cutout {
+  position: absolute;
+  inset: 0;
+  display: block;
+  /* The source PNGs have a baked-in background. This silhouette removes it. */
+  -webkit-mask: url('./assets/taupe-mask.svg') center / contain no-repeat;
+  mask: url('./assets/taupe-mask.svg') center / contain no-repeat;
+  filter: var(--taupe-lighting);
+  transition: filter 220ms ease;
+  pointer-events: none;
+}
+
+.taupe-frame .taupe-mascot__image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  image-rendering: pixelated;
+  user-select: none;
+}
+
+.taupe-frame .taupe-mascot__tongue {
+  /* Change only the mouth, so the fur and paws stay perfectly still. */
+  clip-path: ellipse(5.4% 5.5% at 48.3% 59.5%);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.taupe-frame .taupe-mascot[data-ready="true"][data-tongue="true"] .taupe-mascot__tongue,
+.taupe-frame .taupe-mascot[data-ready="true"]:focus-visible .taupe-mascot__tongue {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .taupe-frame .taupe-mascot[data-ready="true"]:hover .taupe-mascot__tongue {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .taupe-frame .taupe-mascot__cutout,
+  .taupe-frame .taupe-mascot__tongue { transition: none; }
+}

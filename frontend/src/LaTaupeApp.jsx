@@ -28,6 +28,7 @@ import {
   Settings,
   Wrench,
 } from "lucide-react";
+import TaupeFrame from "./components/taupe/TaupeFrame";
 
 // ---------------------------------------------------------------------------
 // Theme tokens
@@ -537,7 +538,9 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
         </p>
 
         <div className="w-full space-y-3">
-          <Dropzone big onFiles={addStaged} />
+          <TaupeFrame theme={dark ? "dark" : "light"}>
+            <Dropzone big onFiles={addStaged} />
+          </TaupeFrame>
 
           {staged.length > 0 && (
             <div className="flex flex-wrap gap-2">
