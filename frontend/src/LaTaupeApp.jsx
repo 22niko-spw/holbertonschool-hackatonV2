@@ -239,6 +239,8 @@ function ToolsSettings({ enabledTools, setToolEnabled }) {
     <div className="fixed bottom-4 left-4 z-20">
       {open && (
         <div className={`absolute bottom-12 left-0 w-80 rounded-lg border p-4 shadow-lg ${T.card}`}>
+          <ApiKeySwitch />
+          <div className={`my-3 h-px ${T.divider}`} />
           <div className="mb-1 flex items-center gap-2">
             <Wrench size={13} className={T.textFaint} />
             <h3 className={`text-[12.5px] font-semibold ${T.textPrimary}`}>Outils de l'agent</h3>
@@ -266,6 +268,96 @@ function ToolsSettings({ enabledTools, setToolEnabled }) {
       >
         <Settings size={16} className={T.textMuted} strokeWidth={2} />
       </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// API key switch — toggles the server-side key between active and revoked
+// via GET/POST /admin/api-key (protected by the admin token, same as
+// /admin/shutdown). Revoked = backend answers exactly like with a truly
+// revoked key (503 auth). Token lives in session state only, never in
+// localStorage or the bundle.
+// ---------------------------------------------------------------------------
+
+function ApiKeySwitch() {
+  const T = useT();
+  const [token, setToken] = useState("");
+  const [status, setStatus] = useState("unknown"); // active | revoked | unknown
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const callAdmin = async (method, body) => {
+    const res = await fetch("/admin/api-key", {
+      method,
+      headers: { "Content-Type": "application/json", "X-Shutdown-Token": token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    return data;
+  };
+
+  const refresh = async () => {
+    if (!token.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const data = await callAdmin("GET");
+      setStatus(data.status);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (next) => {
+    // Switch ON = key active (consistent with the tool toggles above).
+    setBusy(true);
+    setError("");
+    try {
+      const data = await callAdmin("POST", { action: next ? "restore" : "revoke" });
+      setStatus(data.status);
+    } catch (err) {
+      setError(err.message);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mb-1">
+      <div className="mb-1 flex items-center gap-2">
+        <Wrench size={13} className={T.textFaint} />
+        <h3 className={`text-[12.5px] font-semibold ${T.textPrimary}`}>Interrupteurs</h3>
+      </div>
+      <input
+        type="password"
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && refresh()}
+        placeholder="Token admin (X-Shutdown-Token)"
+        autoComplete="off"
+        className={`w-full rounded-md border bg-transparent px-2 py-1.5 font-mono text-[11px] outline-none ${T.chip} ${T.textSecondary}`}
+      />
+      <ToolToggle
+        tool={{
+          label: "Clé API",
+          description:
+            status === "revoked"
+              ? "Coupée — le backend répond comme avec une clé révoquée (503)."
+              : "Active — coupe-la pour simuler une révocation sans redémarrer.",
+        }}
+        enabled={status !== "revoked"}
+        onChange={toggle}
+      />
+      {busy && <p className={`text-[11px] ${T.textFaint}`}>…</p>}
+      {error && <p className="text-[11px] text-rose-400">{error}</p>}
+      {status === "unknown" && !error && (
+        <p className={`text-[11px] ${T.textFainter}`}>Entre le token puis Entrée pour lire l'état.</p>
+      )}
     </div>
   );
 }

@@ -280,6 +280,56 @@ def shutdown():
     ), 202
 
 
+# ─── Interrupteur clé API (démo) ─────────────────────────────────────────────
+# Bascule le client vers une clé invalide pour simuler une révocation SANS
+# redémarrer. Les routes réagissent alors EXACTEMENT comme avec une vraie clé
+# révoquée (503 auth + resource.unavailable journalisé) : aucun chemin
+# d'erreur dédié, donc aucun comportement à deviner.
+_REVOKED_DEMO_KEY = "sk-ant-revoked-demo-key"
+_api_key_revoked = False
+_saved_client = None
+_saved_detector = None
+
+
+@app.route("/admin/api-key", methods=["GET", "POST"])
+def admin_api_key():
+    """État et bascule de la clé API : GET → état, POST {"action"} → revoke | restore."""
+    global client, detector, _api_key_revoked, _saved_client, _saved_detector
+
+    if not SHUTDOWN_TOKEN:
+        log_error("api_key.refused", reason="token_not_configured", remote_addr=request.remote_addr)
+        return jsonify(error="Administration désactivée : SHUTDOWN_TOKEN non configuré."), 403
+
+    provided = request.headers.get("X-Shutdown-Token") or (request.get_json(silent=True) or {}).get("token") or ""
+    if not hmac.compare_digest(str(provided), SHUTDOWN_TOKEN):
+        log_error("api_key.refused", reason="bad_token", remote_addr=request.remote_addr)
+        return jsonify(error="Token invalide."), 403
+
+    if request.method == "GET":
+        return jsonify(status="revoked" if _api_key_revoked else "active")
+
+    action = (request.get_json(silent=True) or {}).get("action") or ""
+    if action == "revoke":
+        if client is None and not _api_key_revoked:
+            return jsonify(error="Aucune clé configurée à révoquer.", status="active"), 409
+        if not _api_key_revoked:
+            _saved_client, _saved_detector = client, detector
+            client = anthropic.Anthropic(api_key=_REVOKED_DEMO_KEY)
+            detector = InjectionDetector(client, model=DETECTION_MODEL)
+            _api_key_revoked = True
+            log_event("api_key.changed", status="revoked", remote_addr=request.remote_addr)
+    elif action == "restore":
+        if _api_key_revoked:
+            client, detector = _saved_client, _saved_detector
+            _saved_client, _saved_detector = None, None
+            _api_key_revoked = False
+            log_event("api_key.changed", status="active", remote_addr=request.remote_addr)
+    else:
+        return jsonify(error="Action inconnue (revoke | restore attendues)."), 400
+
+    return jsonify(status="revoked" if _api_key_revoked else "active")
+
+
 # ─── Routes applicatives ─────────────────────────────────────────────────────
 @app.route("/")
 def index():

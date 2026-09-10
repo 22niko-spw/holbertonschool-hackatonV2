@@ -33,6 +33,7 @@ Routes exposées par `app.py` :
 - `GET /report/<report_id>` : relit un rapport déjà généré.
 - `GET /health` : état des dépendances (base, clé API, journal). 503 dès qu'une dépendance manque.
 - `POST /admin/shutdown` : interrupteur d'arrêt (voir ci-dessous).
+- `GET` / `POST /admin/api-key` : interrupteur clé API (démo, même token que `/admin/shutdown`). `POST {"action": "revoke"}` simule une révocation sans redémarrer (le backend réagit comme avec une vraie clé révoquée : 503 `auth`), `restore` remet la clé d'origine. Bouton dédié dans le panneau outils du frontend.
 
 ```text
 Upload (PDF/DOCX/TXT/MD/JSON)
