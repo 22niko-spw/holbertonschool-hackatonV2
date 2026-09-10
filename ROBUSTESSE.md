@@ -50,6 +50,22 @@ un bandeau Coût sous chaque réponse. Ordres de grandeur mesurés (haiku-4-5) :
 question simple ≈ 173/67 tokens ≈ 0.0005 $ · ingest 3 fichiers ≈ 0.0033 $ ·
 query agentique ≈ 0.010–0.013 $.
 
+## Incident réel : « pas trouvé » alors que la trace contenait la réponse
+
+Observé en test : 9× `cite_sources` sans le paramètre `hits` (KeyError) jusqu'à
+épuisement des 10 tours, puis repli « rien trouvé » — faux, les passages
+étaient dans l'historique. Correctifs :
+1. `cite_sources` sans `hits` → le serveur injecte les passages retrouvés
+   (`[TOOL REPAIR]` au log) au lieu d'échouer ;
+2. disjoncteur : 3 échecs identiques consécutifs → arrêt + repli honnête
+   distinct (« passages retrouvés mais inexploitables, relancez ») ;
+3. `ReportStore.update_question` : la question est réécrite en BDD après `save`
+   (la colonne restait vide, impossible de relier rapport ↔ question à l'audit).
+
+Vérifié offline (LLM simulé : réparation sans erreur, disjoncteur au tour 4
+au lieu de 10, question relue non vide) et en direct (question fautive →
+réponse citée, conf 0.42, zéro erreur de trace).
+
 ## Non garanti (honnêteté)
 
 - Hallucination **intra-passage** : le modèle peut reformuler au-delà des hits.

@@ -39,6 +39,11 @@ class ReportStore(ABC):
     def save_report(self, report: Report) -> Report:
         pass
 
+    @abstractmethod
+    def update_question(self, report_id: str, question: str) -> None:
+        """Réécrit la question après coup (le rapport est persisté avant)."""
+        pass
+
 
 class InMemoryCorpusStore(CorpusStore):
     """Implémentation temporaire en mémoire pour tests standalone."""
@@ -106,6 +111,11 @@ class InMemoryReportStore(ReportStore):
     def save_report(self, report: Report) -> Report:
         self._reports[report.report_id] = report
         return report
+
+    def update_question(self, report_id: str, question: str) -> None:
+        report = self._reports.get(report_id)
+        if report is not None:
+            report.question = question
 
 
 # ─── Outils ───

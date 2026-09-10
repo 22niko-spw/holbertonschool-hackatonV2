@@ -215,6 +215,7 @@ class ReneLaTaupeAgent:
         self.trace_callback = trace_callback
         self._traces: list[ToolCallTrace] = []
         self._usage: CostUsage = CostUsage()
+        self._collected_hits: list[DocHit] = []
 
     def run(self, corpus_id: str, question: str) -> Report:
         """
@@ -224,16 +225,17 @@ class ReneLaTaupeAgent:
         logger.info(f"Démarrage agent corpus={corpus_id} question={question[:80]}")
         self._traces.clear()
         self._usage = CostUsage()
+        self._collected_hits.clear()
 
         messages: list[dict] = [
             {"role": "user", "content": f"Corpus ID: {corpus_id}\nQuestion: {question}"}
         ]
 
         system_prompt = SYSTEM_PROMPT
-        collected_hits: list[DocHit] = []
         final_answer: str | None = None
         cited_answer: CitedAnswer | None = None
         quarantine: list = []
+        loop_broken = False
 
         if self.config.enabled_tools is None:
             active_tools = TOOL_DEFINITIONS
@@ -307,7 +309,7 @@ class ReneLaTaupeAgent:
             for tool_use, trace in zip(tool_uses, self._traces[-len(tool_results):]):
                 raw = getattr(trace, '_raw_result', None)
                 if tool_use.name == "search_corpus" and raw:
-                    collected_hits.extend(raw)
+                    self._collected_hits.extend(raw)
                 elif tool_use.name == "cite_sources" and raw:
                     cited_answer = raw
                 elif tool_use.name == "list_quarantine" and raw:
@@ -315,27 +317,68 @@ class ReneLaTaupeAgent:
                 elif tool_use.name == "finalize_report" and raw:
                     logger.info(f"Rapport finalisé: {raw.report_id}")
                     raw.question = question
-                    raw.answer.confidence = self._verified_confidence(raw.answer, collected_hits)
+                    raw.answer.confidence = self._verified_confidence(raw.answer, self._collected_hits)
+                    self._persist_question(raw.report_id, question)
                     return raw
 
-        # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes
+            # Disjoncteur : 3 échecs identiques consécutifs = boucle enlisée,
+            # inutile de brûler les tours restants (vu : 9× KeyError 'hits').
+            recent = self._traces[-3:]
+            if (
+                len(recent) == 3
+                and all(t.error is not None for t in recent)
+                and len({(t.tool_name, t.error) for t in recent}) == 1
+            ):
+                logger.warning(
+                    f"Disjoncteur : 3 échecs identiques "
+                    f"({recent[0].tool_name}: {recent[0].error}) — arrêt de la boucle."
+                )
+                loop_broken = True
+                break
+
+        # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes.
+        # Le texte distingue les deux situations : aucune preuve trouvée VS
+        # preuves trouvées mais inexploitées (disjoncteur) — affirmer « rien
+        # trouvé » dans le second cas serait un mensonge (cas observé).
         if cited_answer is not None:
-            cited_answer.confidence = self._verified_confidence(cited_answer, collected_hits)
+            cited_answer.confidence = self._verified_confidence(cited_answer, self._collected_hits)
         if cited_answer is None and final_answer:
-            cited_answer = cite_sources(final_answer, collected_hits)
+            cited_answer = cite_sources(final_answer, self._collected_hits)
         elif cited_answer is None:
-            cited_answer = cite_sources(
-                "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus.",
-                []
-            )
+            if loop_broken and self._collected_hits:
+                cited_answer = cite_sources(
+                    "J'ai retrouvé des passages potentiellement pertinents dans le corpus sain, "
+                    "mais je n'ai pas réussi à les exploiter pour construire une réponse citée. "
+                    "Relancez la question : un nouvel essai emprunte un autre chemin.",
+                    [],
+                )
+            else:
+                cited_answer = cite_sources(
+                    "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus.",
+                    [],
+                )
 
         if not quarantine:
             quarantine = list_quarantine(corpus_id, self.corpus_store)
 
         report = finalize_report(corpus_id, cited_answer, quarantine, self.report_store)
         report.question = question
+        self._persist_question(report.report_id, question)
         logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
+
+    def _persist_question(self, report_id: str, question: str) -> None:
+        """Réécrit la question dans le rapport persisté (best-effort).
+
+        finalize_report sauvegarde AVANT que l'appelant attache la question :
+        sans cette réécriture, la colonne reste vide et un audit ne peut plus
+        relier rapport ↔ question. Un échec ici ne doit pas invalider un
+        rapport par ailleurs complet : on journalise et on continue.
+        """
+        try:
+            self.report_store.update_question(report_id, question)
+        except Exception:
+            logger.warning(f"Question non persistée pour {report_id}", exc_info=True)
 
     @staticmethod
     def _verified_confidence(cited: CitedAnswer, hits: list[DocHit]) -> float:
@@ -356,6 +399,13 @@ class ReneLaTaupeAgent:
         tool_name = tool_use.name
         args = tool_use.input
         start_time = time.perf_counter()
+
+        if tool_name == "cite_sources" and not args.get("hits") and self._collected_hits:
+            # Réparation : le LLM omet souvent le paramètre hits (KeyError 'hits'
+            # en boucle jusqu'à épuisement des tours, cas observé). Le serveur
+            # connaît les passages retrouvés : on les injecte au lieu d'échouer.
+            args = {**args, "hits": [h.model_dump() for h in self._collected_hits]}
+            logger.info(f"[TOOL REPAIR] tour={turn} tool=cite_sources hits injectés ({len(self._collected_hits)})")
 
         trace = ToolCallTrace(
             turn=turn,
