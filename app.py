@@ -39,6 +39,7 @@ from rene_la_taupe.security_log import (
     log_event,
     set_request_id,
 )
+from rene_la_taupe.cost_tracking import get_usage as get_cost_usage, instrument_client, start_tracking as start_cost_tracking
 from rene_la_taupe.tools.sqlite_store import SqliteCorpusStore, SqliteDatabase, SqliteReportStore
 
 load_dotenv()
@@ -51,11 +52,15 @@ DATABASE_PATH = os.environ.get("DATABASE_PATH", "la_taupe.db")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "20"))
 SHUTDOWN_TOKEN = os.environ.get("SHUTDOWN_TOKEN", "")
 SHUTDOWN_GRACE_SECONDS = float(os.environ.get("SHUTDOWN_GRACE_SECONDS", "10"))
+MAX_QUESTION_CHARS = int(os.environ.get("MAX_QUESTION_CHARS", "4000"))
+MAX_FILES_PER_INGEST = int(os.environ.get("MAX_FILES_PER_INGEST", "50"))
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+if client is not None:
+    instrument_client(client)
 detector = InjectionDetector(client, model=DETECTION_MODEL) if client else None
 
 db = SqliteDatabase(DATABASE_PATH)
@@ -169,6 +174,7 @@ def _resource_failure(exc: Exception, resource: str, **context):
 @app.before_request
 def _before_request():
     set_request_id(uuid.uuid4().hex[:12])
+    start_cost_tracking()
     g.started_at = time.perf_counter()
     g.counted = False
 
@@ -189,12 +195,14 @@ def _before_request():
 def _after_request(response):
     if getattr(g, "counted", False):
         duration_ms = (time.perf_counter() - g.started_at) * 1000
+        usage = get_cost_usage()
         log_event(
             "request.end",
             method=request.method,
             path=request.path,
             status=response.status_code,
             duration_ms=round(duration_ms, 1),
+            **({"llm_calls": usage["calls"], "cost_usd": usage["cost_usd"]} if usage["calls"] else {}),
         )
     return response
 
@@ -345,6 +353,8 @@ def ask():
     message = (data.get("message") or "").strip()
     if not message:
         return jsonify(error="Le champ 'message' est requis."), 400
+    if len(message) > MAX_QUESTION_CHARS:
+        return jsonify(error=f"Message trop long (max {MAX_QUESTION_CHARS} caractères)."), 400
 
     try:
         response = client.messages.create(
@@ -357,7 +367,7 @@ def ask():
     except anthropic.APIError as exc:
         return _resource_failure(exc, "anthropic_api", route="/api/ask")
 
-    return jsonify(reply=reply)
+    return jsonify(reply=reply, usage=get_cost_usage())
 
 
 @app.route("/ingest", methods=["POST"])
@@ -368,6 +378,8 @@ def ingest():
     files = request.files.getlist("files")
     if not files:
         return jsonify(error="Aucun fichier reçu (champ multipart 'files' attendu)."), 400
+    if len(files) > MAX_FILES_PER_INGEST:
+        return jsonify(error=f"Trop de fichiers (max {MAX_FILES_PER_INGEST} par ingestion)."), 400
 
     unavailable = _require_database("/ingest")
     if unavailable:
@@ -393,8 +405,18 @@ def ingest():
             continue
 
         normalized_text = normalize_unicode(raw_text)
-        chunks = chunk_text(normalized_text)
         doc_id = new_doc_id()
+
+        if not normalized_text.strip():
+            # Rien à cribler ni à indexer : statut explicite plutôt qu'un
+            # appel de détection sur une chaîne vide ou un doc "clean" fantôme
+            # sans aucun chunk retrouvable par la recherche.
+            corpus_store.add_document(corpus_id, doc_id, filename, "empty", sha256, [])
+            log_event("ingest.empty", corpus_id=corpus_id, doc_id=doc_id, filename=filename)
+            documents.append({"doc_id": doc_id, "filename": filename, "status": "empty"})
+            continue
+
+        chunks = chunk_text(normalized_text)
 
         try:
             result = detector.analyze(doc_id, normalized_text)
@@ -432,7 +454,12 @@ def ingest():
         quarantine_count=quarantine_count,
     )
 
-    return jsonify(corpus_id=corpus_id, documents=documents, quarantine_count=quarantine_count)
+    return jsonify(
+        corpus_id=corpus_id,
+        documents=documents,
+        quarantine_count=quarantine_count,
+        usage=get_cost_usage(),
+    )
 
 
 @app.route("/query", methods=["POST"])
@@ -451,6 +478,8 @@ def query():
         return jsonify(error="Le champ 'corpus_id' est requis."), 400
     if not question:
         return jsonify(error="Le champ 'question' est requis."), 400
+    if len(question) > MAX_QUESTION_CHARS:
+        return jsonify(error=f"Question trop longue (max {MAX_QUESTION_CHARS} caractères)."), 400
 
     unavailable = _require_database("/query")
     if unavailable:
@@ -494,7 +523,7 @@ def query():
     log_event("query.done", corpus_id=corpus_id, report_id=report.report_id)
 
     trace = [asdict(t) for t in agent.get_traces()]
-    return jsonify(**report.model_dump(), trace=trace)
+    return jsonify(**report.model_dump(), trace=trace, usage=get_cost_usage())
 
 
 @app.route("/report/<report_id>", methods=["GET"])

@@ -11,7 +11,7 @@
         "shutdown_initiated": true,
         "shutdown_completed": true,
         "db_closed": true,
-        "log_tail": "ngest\", \"status\": 200, \"duration_ms\": 1217.5}\n{\"ts\": \"2026-09-09T21:22:16.905426+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.requested\", \"source\": \"signal\", \"signal\": \"SIGTERM\"}\n{\"ts\": \"2026-09-09T21:22:16.905723+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.drained\"}\n{\"ts\": \"2026-09-09T21:22:16.909591+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.complete\", \"source\": \"signal\", \"db_connections_closed\": 3}\n{\"ts\": \"2026-09-09T21:22:17.189270+00:00\", \"level\": \"INFO\", \"event\": \"app.stop\", \"pid\": 29672}\n"
+        "log_tail": " 1365.7, \"llm_calls\": 1, \"cost_usd\": 0.00071}\n{\"ts\": \"2026-09-10T14:23:24.328683+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.requested\", \"source\": \"signal\", \"signal\": \"SIGTERM\"}\n{\"ts\": \"2026-09-10T14:23:24.329121+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.drained\"}\n{\"ts\": \"2026-09-10T14:23:24.329646+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.complete\", \"source\": \"signal\", \"db_connections_closed\": 3}\n{\"ts\": \"2026-09-10T14:23:24.464824+00:00\", \"level\": \"INFO\", \"event\": \"app.stop\", \"pid\": 14563}\n"
       }
     },
     {
@@ -19,7 +19,7 @@
       "passed": true,
       "details": "SIGINT handled gracefully",
       "evidence": {
-        "log_tail": " \"/health\", \"status\": 200, \"duration_ms\": 1.5}\n{\"ts\": \"2026-09-09T21:22:18.447515+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.requested\", \"source\": \"signal\", \"signal\": \"SIGINT\"}\n{\"ts\": \"2026-09-09T21:22:18.448001+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.drained\"}\n{\"ts\": \"2026-09-09T21:22:18.453652+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.complete\", \"source\": \"signal\", \"db_connections_closed\": 2}\n{\"ts\": \"2026-09-09T21:22:18.960837+00:00\", \"level\": \"INFO\", \"event\": \"app.stop\", \"pid\": 29676}\n"
+        "log_tail": " \"/health\", \"status\": 200, \"duration_ms\": 0.6}\n{\"ts\": \"2026-09-10T14:23:25.699831+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.requested\", \"source\": \"signal\", \"signal\": \"SIGINT\"}\n{\"ts\": \"2026-09-10T14:23:25.700232+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.drained\"}\n{\"ts\": \"2026-09-10T14:23:25.700563+00:00\", \"level\": \"INFO\", \"event\": \"shutdown.complete\", \"source\": \"signal\", \"db_connections_closed\": 2}\n{\"ts\": \"2026-09-10T14:23:26.201309+00:00\", \"level\": \"INFO\", \"event\": \"app.stop\", \"pid\": 14573}\n"
       }
     },
     {
@@ -57,7 +57,7 @@
           "checks": {
             "anthropic_key": "present",
             "database": "ok",
-            "journal": "/tmp/tmp7t624hw8/security.log"
+            "journal": "/tmp/tmp807rmpim/security.log"
           },
           "status": "ok"
         },
@@ -95,15 +95,21 @@
       "details": "Heuristic fallback worked",
       "evidence": {
         "ingest_resp": {
-          "corpus_id": "CORPUS-e198050d",
+          "corpus_id": "CORPUS-ecd403df",
           "documents": [
             {
-              "doc_id": "DOC-cfa6510e",
+              "doc_id": "DOC-801aa723",
               "filename": "malicious.txt",
               "status": "quarantined"
             }
           ],
-          "quarantine_count": 1
+          "quarantine_count": 1,
+          "usage": {
+            "calls": 0,
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
         },
         "quarantined_count": 1
       }
@@ -115,40 +121,72 @@
       "evidence": {
         "query_resp": {
           "answer": {
-            "answer": "## Résultat\n\nJe n'ai pas trouvé d'information correspondant à votre question dans le corpus CORPUS-b411d74e. \n\n**Raison :** La recherche sur les documents marqués comme « clean » n'a retourné aucun passage pertinent. De plus, il n'y a aucun document en quarantaine dans ce corpus.\n\n**Conclusion :** Votre affirmation est exacte — il n'y a pas de réponse à cette question dans le corpus disponible. Pour obtenir une réponse, il serait nécessaire d'ajouter des documents contenant les informations recherchées au corpus.",
+            "answer": "Je n'ai pas trouvé d'informations dans le corpus sain pour répondre à votre question « Question sans réponse dans le corpus ». Le corpus ne contient pas de données pertinentes sur ce sujet.",
             "citations": []
           },
-          "corpus_id": "CORPUS-b411d74e",
-          "created_at": "2026-09-09T21:22:45.127949Z",
+          "corpus_id": "CORPUS-bf344a53",
+          "created_at": "2026-09-10T14:23:54.376469Z",
           "quarantine": [],
           "question": "Question sans réponse dans le corpus",
-          "report_id": "6cc8d18e-c779-4411-9d70-cac3ea05660c",
+          "report_id": "486fa37f-b0f7-455a-b9ad-2932245f181a",
           "trace": [
             {
               "arguments": {
-                "corpus_id": "CORPUS-b411d74e",
+                "corpus_id": "CORPUS-bf344a53",
                 "k": 5,
                 "query": "Question sans réponse dans le corpus"
               },
-              "duration_ms": 0.2633219992276281,
+              "duration_ms": 0.19966000036220066,
               "error": null,
               "result": [],
-              "timestamp": 1788988961.3491178,
+              "timestamp": 1789050230.1287835,
               "tool_name": "search_corpus",
               "turn": 1
             },
             {
               "arguments": {
-                "corpus_id": "CORPUS-b411d74e"
+                "corpus_id": "CORPUS-bf344a53"
               },
-              "duration_ms": 0.22750099742552266,
+              "duration_ms": 0.11350500062690116,
               "error": null,
               "result": [],
-              "timestamp": 1788988962.9074147,
+              "timestamp": 1789050232.0908713,
               "tool_name": "list_quarantine",
               "turn": 2
+            },
+            {
+              "arguments": {
+                "answer": {
+                  "answer": "Je n'ai pas trouvé d'informations dans le corpus sain pour répondre à votre question « Question sans réponse dans le corpus ». Le corpus ne contient pas de données pertinentes sur ce sujet.",
+                  "citations": []
+                },
+                "corpus_id": "CORPUS-bf344a53",
+                "quarantine": []
+              },
+              "duration_ms": 0.32403600016550627,
+              "error": null,
+              "result": {
+                "answer": {
+                  "answer": "Je n'ai pas trouvé d'informations dans le corpus sain pour répondre à votre question « Question sans réponse dans le corpus ». Le corpus ne contient pas de données pertinentes sur ce sujet.",
+                  "citations": []
+                },
+                "corpus_id": "CORPUS-bf344a53",
+                "created_at": "2026-09-10T14:23:54.376469Z",
+                "quarantine": [],
+                "question": "",
+                "report_id": "486fa37f-b0f7-455a-b9ad-2932245f181a"
+              },
+              "timestamp": 1789050234.3764117,
+              "tool_name": "finalize_report",
+              "turn": 3
             }
-          ]
+          ],
+          "usage": {
+            "calls": 3,
+            "cost_usd": 0.009524,
+            "input_tokens": 7219,
+            "output_tokens": 461
+          }
         }
       }
     },

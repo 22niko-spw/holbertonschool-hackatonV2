@@ -118,6 +118,31 @@ Aucun chemin ne renvoie d'erreur sans écrire dans le journal : une panne muette
 
 Note : une connexion SQLite ouverte survit à la suppression de son fichier (le descripteur reste valide). C'est pourquoi la disponibilité de la base est vérifiée par l'inode du fichier et pas seulement par une requête de test — sinon la base peut disparaître sans que rien ne le signale.
 
+## Durcissement (palier 5)
+
+### Coût affiché
+
+Chaque réponse de `/api/ask`, `/ingest` et `/query` inclut un champ `usage` (`calls`, `input_tokens`, `output_tokens`, `cost_usd`) calculé sur les vrais appels Anthropic de la requête, sans toucher au code de l'agent ou du détecteur — le client Anthropic est instrumenté une seule fois côté backend (`src/rene_la_taupe/cost_tracking.py`) et compte tout ce qui passe par lui. Le coût est aussi journalisé sur `request.end`. Reste à afficher côté frontend.
+
+### Comportements définis pour entrées absurdes/vides/hostiles
+
+- Fichier vide ou composé uniquement d'espaces → statut `"empty"` explicite (pas d'appel au détecteur gaspillé, pas de faux `"clean"`).
+- Question dépassant `MAX_QUESTION_CHARS` (4000 par défaut) sur `/api/ask` ou `/query` → 400.
+- Plus de `MAX_FILES_PER_INGEST` (50 par défaut) fichiers en un seul `/ingest` → 400.
+- Extension non supportée ou document corrompu (PDF/DOCX illisible) → statut `"error"` pour ce document, le reste du lot est quand même traité.
+- `corpus_id` malformé ou tentative d'injection → 404 propre (requêtes SQL déjà paramétrées, jamais de concaténation).
+- Question sans rapport avec le corpus ingéré → l'agent l'admet explicitement plutôt que d'inventer une réponse.
+
+### Éval automatisée
+
+`scripts/hardening_test.py` rejoue 16 scénarios distincts (entrées vides, absurdes ou hostiles) contre un serveur réel et vérifie qu'aucun ne produit de crash silencieux ni de réponse inventée :
+
+```bash
+python scripts/hardening_test.py
+```
+
+Dernier résultat : `hardening_report.json` → 16/16.
+
 ### Évaluation automatisée (bonus +5)
 
 `scripts/eval_resilience.py` rejoue 10 scénarios de panne (SIGTERM/SIGINT, clé invalide, réseau coupé, lock DB, disque read-only ×2, fallback détection, max turns, gros corpus) et affiche un score sans intervention manuelle :
@@ -133,6 +158,8 @@ Tests unitaires/comportementaux : `scripts/test_agent.py` (détection, boucle ag
 
 - Aucune gestion de l'historique de conversation sur `/api/ask` (chaque message est indépendant).
 - Recherche dans le corpus par recouvrement de mots-clés (pas d'embeddings/BM25 pour l'instant).
+- Pas de suite `pytest` sur les fonctions backend pures (parsing, normalisation, chunking, store SQLite) — la résilience et le durcissement sont couverts par `eval_resilience.py` et `hardening_test.py`, pas la logique unitaire.
+- `/query` reste bloquant : pas de streaming de la réponse ni des appels d'outils.
 - Déploiement : pas encore fait (bonus optionnel).
 
 ## Documentation du projet
