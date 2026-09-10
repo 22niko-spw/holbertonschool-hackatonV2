@@ -187,7 +187,7 @@ class SqliteCorpusStore(CorpusStore):
                     (corpus_id, datetime.now(UTC).isoformat()),
                 )
         except sqlite3.Error as e:
-            log_error("db.create_corpus_failed", e, corpus_id=corpus_id)
+            log_error("db.create_corpus_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id)
             raise
 
     @_with_retry
@@ -216,7 +216,7 @@ class SqliteCorpusStore(CorpusStore):
                     ],
                 )
         except sqlite3.Error as e:
-            log_error("db.add_document_failed", e, corpus_id=corpus_id, doc_id=doc_id)
+            log_error("db.add_document_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id, doc_id=doc_id)
             raise
 
     @_with_retry
@@ -236,7 +236,7 @@ class SqliteCorpusStore(CorpusStore):
                     ],
                 )
         except sqlite3.Error as e:
-            log_error("db.add_quarantine_failed", e, corpus_id=corpus_id, count=len(entries))
+            log_error("db.add_quarantine_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id, count=len(entries))
             raise
 
     @_with_retry
@@ -248,7 +248,7 @@ class SqliteCorpusStore(CorpusStore):
                     "UPDATE corpora SET status = 'processed' WHERE corpus_id = ?", (corpus_id,)
                 )
         except sqlite3.Error as e:
-            log_error("db.mark_processed_failed", e, corpus_id=corpus_id)
+            log_error("db.mark_processed_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id)
             raise
 
     @_with_retry
@@ -260,7 +260,7 @@ class SqliteCorpusStore(CorpusStore):
             ).fetchone()
             return row is not None
         except sqlite3.Error as e:
-            log_error("db.corpus_exists_failed", e, corpus_id=corpus_id)
+            log_error("db.corpus_exists_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id)
             raise
 
     @_with_retry
@@ -273,7 +273,7 @@ class SqliteCorpusStore(CorpusStore):
             ).fetchall()
             return [DocMeta(**dict(row)) for row in rows]
         except sqlite3.Error as e:
-            log_error("db.list_documents_failed", e, corpus_id=corpus_id)
+            log_error("db.list_documents_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id)
             raise
 
     # ─── CorpusStore interface ───
@@ -311,7 +311,7 @@ class SqliteCorpusStore(CorpusStore):
                 for score, row in scored[:k]
             ]
         except sqlite3.Error as e:
-            log_error("db.search_failed", e, corpus_id=corpus_id, query=query[:50])
+            log_error("db.search_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id, query=query[:50])
             raise
 
     @_with_retry
@@ -324,7 +324,7 @@ class SqliteCorpusStore(CorpusStore):
             ).fetchone()
             return DocMeta(**dict(row)) if row else None
         except sqlite3.Error as e:
-            log_error("db.get_metadata_failed", e, doc_id=doc_id)
+            log_error("db.get_metadata_failed", error_type=type(e).__name__, error=str(e), doc_id=doc_id)
             raise
 
     @_with_retry
@@ -339,7 +339,7 @@ class SqliteCorpusStore(CorpusStore):
             ).fetchall()
             return [QuarantineEntry(**dict(row)) for row in rows]
         except sqlite3.Error as e:
-            log_error("db.list_quarantine_failed", e, corpus_id=corpus_id)
+            log_error("db.list_quarantine_failed", error_type=type(e).__name__, error=str(e), corpus_id=corpus_id)
             raise
 
     @_with_retry
@@ -354,7 +354,7 @@ class SqliteCorpusStore(CorpusStore):
             ).fetchone()
             return row["text"] if row else None
         except sqlite3.Error as e:
-            log_error("db.get_quarantine_excerpt_failed", e, doc_id=doc_id, chunk_id=chunk_id)
+            log_error("db.get_quarantine_excerpt_failed", error_type=type(e).__name__, error=str(e), doc_id=doc_id, chunk_id=chunk_id)
             raise
 
 
@@ -381,7 +381,7 @@ class SqliteReportStore(ReportStore):
                 )
             return report
         except sqlite3.Error as e:
-            log_error("db.save_report_failed", e, report_id=report.report_id)
+            log_error("db.save_report_failed", error_type=type(e).__name__, error=str(e), report_id=report.report_id)
             raise
 
     @_with_retry
@@ -402,7 +402,7 @@ class SqliteReportStore(ReportStore):
                 created_at=row["created_at"],
             )
         except sqlite3.Error as e:
-            log_error("db.get_report_failed", e, report_id=report_id)
+            log_error("db.get_report_failed", error_type=type(e).__name__, error=str(e), report_id=report_id)
             raise
 
 
