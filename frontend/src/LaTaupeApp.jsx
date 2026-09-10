@@ -796,6 +796,58 @@ function SecurityAudit({ doc, entries }) {
 // Right column: agent execution trace (Palier 3 — tool calls)
 // ---------------------------------------------------------------------------
 
+// Rendu clé/valeur générique — remplace le JSON brut par une structure lisible,
+// sans template sur-mesure par outil (les 6 outils ont des formes différentes).
+function PrettyValue({ value }) {
+  const T = useT();
+
+  if (value === null || value === undefined || value === "") {
+    return <span className={T.textFainter}>—</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <span className={T.textFainter}>Liste vide</span>;
+    }
+    return (
+      <div className="space-y-1.5">
+        {value.map((item, i) => (
+          <div key={i} className={`rounded border p-2 ${T.card}`}>
+            <PrettyValue value={item} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return <span className={T.textFainter}>{"{}"}</span>;
+    return (
+      <dl className="space-y-1">
+        {entries.map(([k, v]) => (
+          <div key={k} className="flex flex-wrap gap-x-2">
+            <dt className={`shrink-0 font-mono text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>{k}</dt>
+            <dd className={`min-w-0 flex-1 break-words ${T.textMuted}`}>
+              <PrettyValue value={v} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+
+  if (typeof value === "number") {
+    return <span className="font-mono">{Number.isInteger(value) ? value : value.toFixed(2)}</span>;
+  }
+
+  if (typeof value === "boolean") {
+    return <span className="font-mono">{value ? "vrai" : "faux"}</span>;
+  }
+
+  return <span className="break-words">{String(value)}</span>;
+}
+
 function ToolTraceEntry({ entry }) {
   const T = useT();
   const hasError = Boolean(entry.error);
@@ -825,9 +877,9 @@ function ToolTraceEntry({ entry }) {
       <div className="mt-3 space-y-2.5">
         <div>
           <p className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Arguments</p>
-          <pre className={`mt-1 max-h-40 overflow-auto rounded border p-2 text-[11px] leading-relaxed ${T.cardAlt}`}>
-            <code className={`font-mono ${T.textMuted}`}>{JSON.stringify(entry.arguments, null, 2)}</code>
-          </pre>
+          <div className={`mt-1 max-h-48 overflow-auto rounded border p-2.5 text-[12px] leading-relaxed ${T.cardAlt}`}>
+            <PrettyValue value={entry.arguments} />
+          </div>
         </div>
 
         {hasError ? (
@@ -838,9 +890,9 @@ function ToolTraceEntry({ entry }) {
         ) : (
           <div>
             <p className={`text-[10.5px] uppercase tracking-wide ${T.textFaint}`}>Résultat</p>
-            <pre className={`mt-1 max-h-40 overflow-auto rounded border p-2 text-[11px] leading-relaxed ${T.cardAlt}`}>
-              <code className={`font-mono ${T.textMuted}`}>{JSON.stringify(entry.result, null, 2)}</code>
-            </pre>
+            <div className={`mt-1 max-h-48 overflow-auto rounded border p-2.5 text-[12px] leading-relaxed ${T.cardAlt}`}>
+              <PrettyValue value={entry.result} />
+            </div>
           </div>
         )}
       </div>
