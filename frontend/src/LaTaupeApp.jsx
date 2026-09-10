@@ -4,6 +4,7 @@ import React, {
   useContext,
   createContext,
   useCallback,
+  useEffect,
 } from "react";
 import {
   ShieldAlert,
@@ -151,6 +152,37 @@ function loadEnabledTools() {
     return Object.fromEntries(AGENT_TOOLS.map((t) => [t.name, saved[t.name] !== false]));
   } catch (e) {
     return Object.fromEntries(AGENT_TOOLS.map((t) => [t.name, true]));
+  }
+}
+
+// Session en cours (onglet courant uniquement) — permet de rester sur le
+// dashboard et de relancer automatiquement la même question après un F5.
+// Les fichiers déposés (File objects) ne survivent pas à un reload : seul le
+// corpus_id déjà ingéré côté serveur est rejoué (nouvelle requête réelle).
+const SESSION_STORAGE_KEY = "la-taupe:session";
+
+function saveSession(session) {
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch (e) {
+    // sessionStorage indisponible — le refresh perdra juste l'état, pas grave
+  }
+}
+
+function loadSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (e) {
+    // rien à faire
   }
 }
 
@@ -1087,6 +1119,7 @@ export default function LaTaupeApp() {
   const [docs, setDocs] = useState([]);
   const [question, setQuestion] = useState("");
   const [askedQuestion, setAskedQuestion] = useState("");
+  const [corpusId, setCorpusId] = useState(null);
   const [staged, setStaged] = useState([]);
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState([]);
@@ -1121,6 +1154,80 @@ export default function LaTaupeApp() {
     setStaged((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
+  // Question seule, sans corpus — appel direct, pas de boucle d'outils, pas de trace.
+  const runAsk = useCallback(async (q) => {
+    setLoading(true);
+    setLoadingStage("querying");
+    setError("");
+    try {
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: q }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur inconnue");
+      setAnswer(data.reply);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setLoadingStage(null);
+    }
+  }, []);
+
+  // Question sur un corpus déjà ingéré (cid) — relance une vraie requête /query
+  // (nouveau passage de l'agent, pas une simple relecture d'un ancien résultat).
+  const runQuery = useCallback(
+    async (cid, q) => {
+      setLoading(true);
+      setLoadingStage("querying");
+      setError("");
+      try {
+        const activeTools = AGENT_TOOLS.map((t) => t.name).filter((name) => enabledTools[name] !== false);
+        const queryRes = await fetch("/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ corpus_id: cid, question: q, enabled_tools: activeTools }),
+        });
+        const report = await queryRes.json();
+        if (!queryRes.ok) throw new Error(report.error || "Erreur lors de la génération de la réponse.");
+
+        setAnswer(report.answer.answer);
+        setCitations(report.answer.citations || []);
+        setQuarantineEntries(report.quarantine || []);
+        setTrace(report.trace || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+        setLoadingStage(null);
+      }
+    },
+    [enabledTools]
+  );
+
+  // Au montage : si un F5 nous ramène ici, on reste sur le dashboard et on
+  // relance vraiment la question (nouvelle requête réelle — les fichiers
+  // déposés, eux, ne survivent pas à un reload, donc pas de re-ingestion).
+  useEffect(() => {
+    const saved = loadSession();
+    if (!saved || saved.view !== "dashboard" || !saved.askedQuestion) return;
+
+    setView("dashboard");
+    setAskedQuestion(saved.askedQuestion);
+    setDocs(saved.docs || []);
+    setCorpusId(saved.corpusId || null);
+
+    if (saved.corpusId) {
+      runQuery(saved.corpusId, saved.askedQuestion);
+    } else {
+      runAsk(saved.askedQuestion);
+    }
+    // Volontairement []: ne doit s'exécuter qu'une fois, au tout premier rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const launchAnalysis = async () => {
     const trimmed = question.trim();
     if (!trimmed) return;
@@ -1135,27 +1242,13 @@ export default function LaTaupeApp() {
     setError("");
     setStaged([]);
     setView("dashboard");
-    setLoading(true);
 
-    // No files: plain question, no corpus to search — direct LLM call, no agent loop, no trace.
+    // No files: plain question, no corpus to search.
     if (filesToUpload.length === 0) {
       setDocs([]);
-      setLoadingStage("querying");
-      try {
-        const res = await fetch("/api/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Erreur inconnue");
-        setAnswer(data.reply);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-        setLoadingStage(null);
-      }
+      setCorpusId(null);
+      saveSession({ view: "dashboard", askedQuestion: trimmed, corpusId: null, docs: [] });
+      runAsk(trimmed);
       return;
     }
 
@@ -1167,6 +1260,7 @@ export default function LaTaupeApp() {
         status: "processing",
       }))
     );
+    setLoading(true);
     setLoadingStage("ingesting");
 
     try {
@@ -1184,33 +1278,28 @@ export default function LaTaupeApp() {
         error: d.error,
       }));
       setDocs(newDocs);
-
-      setLoadingStage("querying");
-      const activeTools = AGENT_TOOLS.map((t) => t.name).filter((name) => enabledTools[name] !== false);
-      const queryRes = await fetch("/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ corpus_id: ingestData.corpus_id, question: trimmed, enabled_tools: activeTools }),
+      setCorpusId(ingestData.corpus_id);
+      saveSession({
+        view: "dashboard",
+        askedQuestion: trimmed,
+        corpusId: ingestData.corpus_id,
+        docs: newDocs,
       });
-      const report = await queryRes.json();
-      if (!queryRes.ok) throw new Error(report.error || "Erreur lors de la génération de la réponse.");
 
-      setAnswer(report.answer.answer);
-      setCitations(report.answer.citations || []);
-      setQuarantineEntries(report.quarantine || []);
-      setTrace(report.trace || []);
+      await runQuery(ingestData.corpus_id, trimmed);
     } catch (err) {
       setError(err.message);
-    } finally {
       setLoading(false);
       setLoadingStage(null);
     }
   };
 
   const backToHome = () => {
+    clearSession();
     setDocs([]);
     setQuestion("");
     setAskedQuestion("");
+    setCorpusId(null);
     setAnswer("");
     setCitations([]);
     setQuarantineEntries([]);
