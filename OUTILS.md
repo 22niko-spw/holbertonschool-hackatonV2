@@ -9,7 +9,7 @@ Chaque outil est une fonction pure (sans effet de bord) sauf mention explicite. 
 | `list_quarantine` | `list_quarantine(corpus_id: str) -> list[QuarantineEntry]` | Non | Liste les documents en quarantaine pour un corpus : `doc_id`, `technique`, `excerpt`, `confidence`, `detected_at`. |
 | `read_quarantine_excerpt` | `read_quarantine_excerpt(doc_id: str, chunk_id: str) -> str` | Non | Retourne l'extrait exact mis en quarantaine (pour affichage audit). Ne renvoie jamais le document complet. |
 | `cite_sources` | `cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer` | Non | Attache les citations aux segments de la réponse. Retourne `answer` + `citations: list[{doc_id, chunk_id, span_start, span_end}]`. |
-| `finalize_report` | `finalize_report(corpus_id: str, answer: CitedAnswer, quarantine: list[QuarantineEntry]) -> Report` | **Oui** | Écrit le rapport final en BDD (table `reports`), marque le corpus comme `processed`. Point de non-retour : déclenche l'envoi vers le frontend. |
+| `finalize_report` | `finalize_report(corpus_id: str, answer: CitedAnswer, quarantine: list[QuarantineEntry], persist: bool = True) -> Report` | **Oui (si `persist`)** | Écrit le rapport final en BDD (table `reports`), marque le corpus comme `processed`. Point de non-retour : déclenche l'envoi vers le frontend. `persist=False` (outil coupé) : rapport construit mais non écrit. |
 
 ## Types auxiliaires
 ```python

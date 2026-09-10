@@ -66,6 +66,24 @@ Vérifié offline (LLM simulé : réparation sans erreur, disjoncteur au tour 4
 au lieu de 10, question relue non vide) et en direct (question fautive →
 réponse citée, conf 0.42, zéro erreur de trace).
 
+## Coupure d'outils (`enabled_tools`) : testée une par une
+
+`enabled_tools` ne filtrait que le menu proposé au modèle : le repli et
+`finalize_report` réintroduisaient les outils coupés (citations affichées
+malgré l'interrupteur). Correctifs : repli + `finalize` purgent citations /
+quarantaine / persistence selon les outils actifs ; `_execute_tool` refuse
+un outil coupé même halluciné ; texte spontané sans preuve → repli honnête.
+
+| Outil coupé | Observé (live) |
+|---|---|
+| `cite_sources` | 0 citation, conf 0.0 (même via `finalize` direct) |
+| `list_quarantine` | `quarantine: []` (citations intactes) |
+| `finalize_report` | rapport complet renvoyé mais 404 à la relecture (non persisté) |
+| `search_corpus` | appel halluciné refusé (`Outil désactivé…`), repli « rien trouvé » — plus d'invention « problème technique » |
+| `get_doc_metadata` / `read_quarantine_excerpt` | absents de la trace, reste inchangé |
+| tous (`[]`) | repli honnête, 0 citation, 0 quarantaine, 1 seul appel LLM |
+| aucun (régression) | citations + quarantaine présentes |
+
 ## Non garanti (honnêteté)
 
 - Hallucination **intra-passage** : le modèle peut reformuler au-delà des hits.

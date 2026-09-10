@@ -278,7 +278,7 @@ function ToolsSettings({ enabledTools, setToolEnabled }) {
             <h3 className={`text-[12.5px] font-semibold ${T.textPrimary}`}>Outils de l'agent</h3>
           </div>
           <p className={`mb-2 text-[11px] ${T.textFaint}`}>
-            {activeCount}/{AGENT_TOOLS.length} actifs — un outil désactivé n'est plus proposé au modèle.
+            {activeCount}/{AGENT_TOOLS.length} actifs — un outil désactivé n'est ni proposé au modèle ni utilisé dans le rapport.
           </p>
           <div className={`divide-y ${T.card}`}>
             {AGENT_TOOLS.map((tool) => (

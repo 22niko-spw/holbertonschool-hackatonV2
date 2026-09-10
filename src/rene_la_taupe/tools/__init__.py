@@ -171,8 +171,14 @@ def finalize_report(
     answer: CitedAnswer,
     quarantine: list[QuarantineEntry],
     store: ReportStore,
+    persist: bool = True,
 ) -> Report:
-    """Écrit le rapport final en BDD — SEUL outil à effet de bord."""
+    """Construit le rapport final — SEUL outil à effet de bord (si persist).
+
+    persist=False : rapport construit mais NON écrit (outil finalize_report
+    coupé) — la route le renvoie quand même, il ne sera juste pas relisible
+    via GET /report/<id>.
+    """
     report = Report(
         report_id=str(uuid.uuid4()),
         corpus_id=corpus_id,
@@ -181,4 +187,6 @@ def finalize_report(
         quarantine=quarantine,
         created_at=datetime.utcnow().isoformat() + "Z",
     )
-    return store.save_report(report)
+    if persist:
+        return store.save_report(report)
+    return report

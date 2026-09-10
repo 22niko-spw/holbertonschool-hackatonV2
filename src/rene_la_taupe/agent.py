@@ -317,7 +317,15 @@ class ReneLaTaupeAgent:
                 elif tool_use.name == "finalize_report" and raw:
                     logger.info(f"Rapport finalisé: {raw.report_id}")
                     raw.question = question
-                    raw.answer.confidence = self._verified_confidence(raw.answer, self._collected_hits)
+                    if not self._tool_enabled("cite_sources"):
+                        # Outil coupé : le modèle ne peut pas l'appeler, mais il
+                        # peut glisser des citations dans finalize_report — on
+                        # les retire pour que la coupure soit effective.
+                        raw.answer = CitedAnswer(answer=raw.answer.answer, citations=[], confidence=0.0)
+                    else:
+                        raw.answer.confidence = self._verified_confidence(raw.answer, self._collected_hits)
+                    if not self._tool_enabled("list_quarantine"):
+                        raw.quarantine = []
                     self._persist_question(raw.report_id, question)
                     return raw
 
@@ -342,8 +350,14 @@ class ReneLaTaupeAgent:
         # trouvé » dans le second cas serait un mensonge (cas observé).
         if cited_answer is not None:
             cited_answer.confidence = self._verified_confidence(cited_answer, self._collected_hits)
-        if cited_answer is None and final_answer:
-            cited_answer = cite_sources(final_answer, self._collected_hits)
+        if cited_answer is None and final_answer and self._collected_hits:
+            # Texte spontané du modèle ADOSSÉ à des passages retrouvés.
+            if self._tool_enabled("cite_sources"):
+                cited_answer = cite_sources(final_answer, self._collected_hits)
+            else:
+                # Outil coupé : réponse sans citations vérifiables, confiance
+                # nulle. Le badge UI signalera l'absence de sources.
+                cited_answer = CitedAnswer(answer=final_answer, citations=[], confidence=0.0)
         elif cited_answer is None:
             if loop_broken and self._collected_hits:
                 cited_answer = cite_sources(
@@ -359,11 +373,21 @@ class ReneLaTaupeAgent:
                 )
 
         if not quarantine:
-            quarantine = list_quarantine(corpus_id, self.corpus_store)
+            if self._tool_enabled("list_quarantine"):
+                quarantine = list_quarantine(corpus_id, self.corpus_store)
+            else:
+                quarantine = []
 
-        report = finalize_report(corpus_id, cited_answer, quarantine, self.report_store)
+        report = finalize_report(
+            corpus_id,
+            cited_answer,
+            quarantine,
+            self.report_store,
+            persist=self._tool_enabled("finalize_report"),
+        )
         report.question = question
-        self._persist_question(report.report_id, question)
+        if self._tool_enabled("finalize_report"):
+            self._persist_question(report.report_id, question)
         logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
 
@@ -379,6 +403,16 @@ class ReneLaTaupeAgent:
             self.report_store.update_question(report_id, question)
         except Exception:
             logger.warning(f"Question non persistée pour {report_id}", exc_info=True)
+
+    def _tool_enabled(self, name: str) -> bool:
+        """Un outil coupé ne doit ni être proposé au modèle NI contribuer au rapport.
+
+        Sans ce garde, le repli de fin de boucle réintroduisait cite_sources,
+        list_quarantine et finalize_report même coupés (citations et quarantaine
+        affichées malgré l'interrupteur).
+        """
+        enabled = self.config.enabled_tools
+        return enabled is None or name in enabled
 
     @staticmethod
     def _verified_confidence(cited: CitedAnswer, hits: list[DocHit]) -> float:
@@ -416,6 +450,8 @@ class ReneLaTaupeAgent:
         logger.info(f"[TOOL CALL] tour={turn} tool={tool_name} args={json.dumps(args, ensure_ascii=False)}")
 
         try:
+            if not self._tool_enabled(tool_name):
+                raise ToolExecutionError(tool_name, "Outil désactivé par la configuration (enabled_tools)")
             impl = TOOL_IMPL.get(tool_name)
             if impl is None:
                 raise ToolExecutionError(tool_name, f"Outil inconnu: {tool_name}")
