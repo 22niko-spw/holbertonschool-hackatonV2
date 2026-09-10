@@ -10,6 +10,7 @@ export default defineConfig({
       "/ingest": "http://localhost:5000",
       "/query": "http://localhost:5000",
       "/report": "http://localhost:5000",
+      "/admin": "http://localhost:5000",
     },
   },
 });

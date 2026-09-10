@@ -4,4 +4,5 @@ anthropic
 pydantic
 pypdf
 python-docx
+tenacity>=9.0.0
 requests
