@@ -208,7 +208,7 @@ function ThemeToggle({ dark, setDark }) {
   return (
     <button
       onClick={() => setDark((v) => !v)}
-      aria-label="Toggle theme"
+      aria-label="Changer de thème"
       className={`flex h-[30px] w-[30px] items-center justify-center rounded-md border transition-colors ${T.chip} ${T.chipHover}`}
     >
       {dark ? (
@@ -441,11 +441,11 @@ function Dropzone({ onFiles, big }) {
           <Upload size={big ? 18 : 16} className={T.textMuted} strokeWidth={2} />
         </div>
         <p className={`${big ? "text-[15px]" : "text-sm"} ${T.textSecondary}`}>
-          {dragOver ? "Release to add to corpus" : "Drag and drop corpus files"}
+          {dragOver ? "Relâche pour l'ajouter au corpus" : "Glisse-dépose tes fichiers"}
         </p>
         <p className={`mt-1 text-xs ${T.textFaint}`}>
-          PDF, DOCX, TXT, MD, JSON — or{" "}
-          <span className={`${T.textSecondary} underline underline-offset-2`}>click to browse</span>
+          PDF, DOCX, TXT, MD, JSON — ou{" "}
+          <span className={`${T.textSecondary} underline underline-offset-2`}>clique pour parcourir</span>
         </p>
       </div>
     </div>
@@ -466,7 +466,7 @@ function StagedChip({ entry, onRemove }) {
       <button
         onClick={() => onRemove(entry.id)}
         className={`flex h-4 w-4 items-center justify-center rounded-full ${T.hoverBg} ${T.textFaint}`}
-        aria-label={`Remove ${entry.file.name}`}
+        aria-label={`Retirer ${entry.file.name}`}
       >
         <X size={11} />
       </button>
@@ -501,7 +501,7 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
             </div>
             <h1 className={`text-[14.5px] font-semibold tracking-tight ${T.textPrimary}`}>
               LA TAUPE
-              <span className={`ml-2 font-normal ${T.textFaint}`}>· Document Security &amp; Analysis</span>
+              <span className={`ml-2 font-normal ${T.textFaint}`}>· Sécurité &amp; analyse documentaire</span>
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -594,10 +594,10 @@ function HealthyCard({ doc, selected, onSelect }) {
           </div>
         </div>
         {doc.status === "processing" ? (
-          <Badge tone="neutral">SCANNING</Badge>
+          <Badge tone="neutral">ANALYSE</Badge>
         ) : (
           <Badge tone="emerald" icon={CheckCircle2}>
-            VERIFIED
+            VÉRIFIÉ
           </Badge>
         )}
       </div>
@@ -623,7 +623,7 @@ function QuarantinedCard({ doc, selected, onSelect }) {
           </div>
         </div>
         <Badge tone="rose" icon={AlertTriangle}>
-          THREAT DETECTED
+          MENACE DÉTECTÉE
         </Badge>
       </div>
     </button>
@@ -770,11 +770,11 @@ function SecurityAudit({ doc, entries }) {
             >
               {copiedIndex === idx ? (
                 <>
-                  <Check size={11} /> Copied
+                  <Check size={11} /> Copié
                 </>
               ) : (
                 <>
-                  <Copy size={11} /> Copy
+                  <Copy size={11} /> Copier
                 </>
               )}
             </button>
@@ -921,7 +921,7 @@ function Dashboard({
               </div>
               <h1 className={`text-[14.5px] font-semibold tracking-tight ${T.textPrimary}`}>
                 LA TAUPE
-                <span className={`ml-2 font-normal ${T.textFaint}`}>· Document Security &amp; Analysis</span>
+                <span className={`ml-2 font-normal ${T.textFaint}`}>· Sécurité &amp; analyse documentaire</span>
               </h1>
             </div>
 
@@ -933,24 +933,24 @@ function Dashboard({
           <div className={`mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border px-4 py-2.5 ${T.cardAlt}`}>
             <div className="flex items-center gap-1.5">
               <Activity size={13} className={T.textFaint} />
-              <span className={`text-[12.5px] ${T.textSecondary}`}>{docs.length} Documents Analyzed</span>
+              <span className={`text-[12.5px] ${T.textSecondary}`}>{docs.length} documents analysés</span>
             </div>
             <div className={`h-3 w-px ${T.divider}`} />
             <div className="flex items-center gap-1.5">
               <CheckCircle2 size={13} className="text-emerald-400" />
-              <span className={`text-[12.5px] ${T.textSecondary}`}>{healthy.length} Clean</span>
+              <span className={`text-[12.5px] ${T.textSecondary}`}>{healthy.length} sains</span>
             </div>
             <div className={`h-3 w-px ${T.divider}`} />
             <div className="flex items-center gap-1.5">
               <AlertTriangle size={13} className="text-rose-400" />
-              <span className={`text-[12.5px] ${T.textSecondary}`}>{quarantined.length} Quarantined</span>
+              <span className={`text-[12.5px] ${T.textSecondary}`}>{quarantined.length} en quarantaine</span>
             </div>
             {processing.length > 0 && (
               <>
                 <div className={`h-3 w-px ${T.divider}`} />
                 <div className="flex items-center gap-1.5">
                   <Loader2 size={13} className={`animate-spin ${T.textFaint}`} />
-                  <span className={`text-[12.5px] ${T.textSecondary}`}>{processing.length} Scanning</span>
+                  <span className={`text-[12.5px] ${T.textSecondary}`}>{processing.length} en cours d'analyse</span>
                 </div>
               </>
             )}
@@ -963,12 +963,12 @@ function Dashboard({
           <div className="space-y-5">
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <h2 className={`text-[12px] font-medium uppercase tracking-wide ${T.textFaint}`}>Healthy Corpus</h2>
+                <h2 className={`text-[12px] font-medium uppercase tracking-wide ${T.textFaint}`}>Corpus sain</h2>
                 <span className={`text-[11px] ${T.textFainter}`}>({healthy.length})</span>
               </div>
               <div className="space-y-2">
                 {healthy.length === 0 && processing.length === 0 && (
-                  <p className={`text-[12px] italic ${T.textFainter}`}>No verified documents yet.</p>
+                  <p className={`text-[12px] italic ${T.textFainter}`}>Aucun document vérifié pour l'instant.</p>
                 )}
                 {[...processing, ...healthy].map((doc) => (
                   <HealthyCard
@@ -987,13 +987,13 @@ function Dashboard({
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <h2 className={`text-[12px] font-medium uppercase tracking-wide ${T.roseText}`}>
-                  Quarantined / Threats
+                  Quarantaine / Menaces
                 </h2>
                 <span className={`text-[11px] ${T.textFainter}`}>({quarantined.length})</span>
               </div>
               <div className="space-y-2">
                 {quarantined.length === 0 && (
-                  <p className={`text-[12px] italic ${T.textFainter}`}>No threats detected.</p>
+                  <p className={`text-[12px] italic ${T.textFainter}`}>Aucune menace détectée.</p>
                 )}
                 {quarantined.map((doc) => (
                   <QuarantinedCard
@@ -1032,7 +1032,7 @@ function Dashboard({
                   activeTab === "summary" ? T.tabActive : T.tabInactive
                 }`}
               >
-                Aggregated Summary
+                Résumé
                 {activeTab === "summary" && <span className={`absolute bottom-0 left-0 right-0 h-[2px] ${T.tabUnderline}`} />}
               </button>
               <button
@@ -1042,7 +1042,7 @@ function Dashboard({
                   activeTab === "trace" ? T.tabActive : T.tabInactive
                 }`}
               >
-                Agent Trace
+                Trace de l'agent
                 {trace && trace.length > 0 && (
                   <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${T.tag}`}>
                     {trace.length}
@@ -1057,7 +1057,7 @@ function Dashboard({
                   activeTab === "audit" ? T.tabActive : T.tabInactive
                 }`}
               >
-                Security Audit &amp; Injection Logs
+                Audit de sécurité &amp; journal des injections
                 {quarantined.length > 0 && (
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-500/15 text-[10px] text-rose-400">
                     {quarantined.length}
