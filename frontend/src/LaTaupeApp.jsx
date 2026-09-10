@@ -203,16 +203,6 @@ function Badge({ tone, children, icon: Icon }) {
   );
 }
 
-function StatusDot({ tone = "emerald" }) {
-  const colors = { emerald: "bg-emerald-400", rose: "bg-rose-400" };
-  return (
-    <span className="relative flex h-2 w-2">
-      <span className={`absolute inline-flex h-full w-full rounded-full ${colors[tone]} opacity-60 animate-ping`} />
-      <span className={`relative inline-flex h-2 w-2 rounded-full ${colors[tone]}`} />
-    </span>
-  );
-}
-
 function ThemeToggle({ dark, setDark }) {
   const T = useT();
   return (
@@ -515,10 +505,6 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${T.chip}`}>
-              <StatusDot tone="emerald" />
-              <span className={`text-[12px] ${T.textMuted}`}>Engine Active — ReAct v1.0</span>
-            </div>
             <ThemeToggle dark={dark} setDark={setDark} />
           </div>
         </div>
@@ -940,10 +926,6 @@ function Dashboard({
             </div>
 
             <div className="flex items-center gap-2">
-              <div className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${T.chip}`}>
-                <StatusDot tone="emerald" />
-                <span className={`text-[12px] ${T.textMuted}`}>Engine Active — ReAct v1.0</span>
-              </div>
               <ThemeToggle dark={dark} setDark={setDark} />
             </div>
           </div>
