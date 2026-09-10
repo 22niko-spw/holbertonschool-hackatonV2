@@ -238,7 +238,7 @@ function ToolsSettings({ enabledTools, setToolEnabled }) {
   return (
     <div className="fixed bottom-4 left-4 z-20">
       {open && (
-        <div className={`absolute bottom-12 left-0 w-80 rounded-lg border p-4 shadow-lg ${T.card}`}>
+        <div className={`absolute bottom-12 left-0 max-h-[75vh] w-80 overflow-y-auto rounded-lg border p-4 shadow-lg ${T.card}`}>
           <ApiKeySwitch />
           <div className={`my-3 h-px ${T.divider}`} />
           <div className="mb-1 flex items-center gap-2">
@@ -314,6 +314,10 @@ function ApiKeySwitch() {
 
   const toggle = async (next) => {
     // Switch ON = key active (consistent with the tool toggles above).
+    if (!token.trim()) {
+      setError("Colle d'abord ton token admin (ligne SHUTDOWN_TOKEN du .env), puis Entrée.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -356,7 +360,9 @@ function ApiKeySwitch() {
       {busy && <p className={`text-[11px] ${T.textFaint}`}>…</p>}
       {error && <p className="text-[11px] text-rose-400">{error}</p>}
       {status === "unknown" && !error && (
-        <p className={`text-[11px] ${T.textFainter}`}>Entre le token puis Entrée pour lire l'état.</p>
+        <p className={`text-[11px] ${T.textFainter}`}>
+          Sans token, le switch ne peut rien faire : colle-le ci-dessus puis Entrée.
+        </p>
       )}
     </div>
   );
