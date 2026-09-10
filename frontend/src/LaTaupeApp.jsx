@@ -1191,7 +1191,18 @@ export default function LaTaupeApp() {
           body: JSON.stringify({ corpus_id: cid, question: q, enabled_tools: activeTools }),
         });
         const report = await queryRes.json();
-        if (!queryRes.ok) throw new Error(report.error || "Erreur lors de la génération de la réponse.");
+        if (!queryRes.ok) {
+          if (queryRes.status === 404) {
+            // Corpus disparu côté serveur (redémarrage, base réinitialisée) —
+            // la session sauvegardée ne mènera plus jamais nulle part, inutile
+            // de la rejouer indéfiniment à chaque futur refresh.
+            clearSession();
+            throw new Error(
+              "Ce corpus n'existe plus côté serveur (redémarrage probable). Reviens à l'accueil et redépose tes documents."
+            );
+          }
+          throw new Error(report.error || "Erreur lors de la génération de la réponse.");
+        }
 
         setAnswer(report.answer.answer);
         setCitations(report.answer.citations || []);
