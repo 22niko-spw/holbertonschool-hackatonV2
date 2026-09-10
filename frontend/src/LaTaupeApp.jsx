@@ -553,7 +553,7 @@ function HomePage({ dark, setDark, staged, addStaged, removeStaged, question, se
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Pose ta question…"
+              placeholder="Pose ta question à René…"
               className={`w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[13.5px] outline-none ${T.textPrimary} placeholder:${T.textFaint}`}
             />
             <div className="flex items-center justify-between px-3.5 pb-2.5 pt-1">
