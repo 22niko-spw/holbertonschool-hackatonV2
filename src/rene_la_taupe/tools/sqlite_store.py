@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS documents (
     doc_id TEXT PRIMARY KEY,
     corpus_id TEXT NOT NULL,
     filename TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('clean', 'quarantined')),
+    status TEXT NOT NULL CHECK (status IN ('clean', 'quarantined', 'empty')),
     upload_ts TEXT NOT NULL,
     sha256 TEXT NOT NULL
 );

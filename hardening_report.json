@@ -1,0 +1,223 @@
+{
+  "passed": 16,
+  "total": 16,
+  "score": 100.0,
+  "results": [
+    {
+      "name": "Question vide sur /query",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Le champ 'question' est requis."
+        }
+      }
+    },
+    {
+      "name": "Question composée uniquement d'espaces",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Le champ 'question' est requis."
+        }
+      }
+    },
+    {
+      "name": "corpus_id manquant sur /query",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Le champ 'corpus_id' est requis."
+        }
+      }
+    },
+    {
+      "name": "corpus_id inconnu (et façon injection SQL)",
+      "passed": true,
+      "details": "status=404",
+      "evidence": {
+        "body": {
+          "error": "Corpus inconnu : '' OR '1'='1'."
+        }
+      }
+    },
+    {
+      "name": "Question surdimensionnée (> MAX_QUESTION_CHARS)",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Question trop longue (max 4000 caractères)."
+        }
+      }
+    },
+    {
+      "name": "Message vide sur /api/ask",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Le champ 'message' est requis."
+        }
+      }
+    },
+    {
+      "name": "/ingest sans fichier",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Aucun fichier reçu (champ multipart 'files' attendu)."
+        }
+      }
+    },
+    {
+      "name": "/ingest avec trop de fichiers (> MAX_FILES_PER_INGEST)",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": {
+          "error": "Trop de fichiers (max 50 par ingestion)."
+        }
+      }
+    },
+    {
+      "name": "Fichier vide / espaces uniquement",
+      "passed": true,
+      "details": "status côté doc=empty",
+      "evidence": {
+        "body": {
+          "corpus_id": "CORPUS-6576ae02",
+          "documents": [
+            {
+              "doc_id": "DOC-680508ee",
+              "filename": "empty.txt",
+              "status": "empty"
+            }
+          ],
+          "quarantine_count": 0,
+          "usage": {
+            "calls": 0,
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Extension non supportée (.exe)",
+      "passed": true,
+      "details": "status côté doc=error",
+      "evidence": {
+        "body": {
+          "corpus_id": "CORPUS-767b6493",
+          "documents": [
+            {
+              "error": "Type de fichier non supporté : '.exe'. Supportés : ['.docx', '.json', '.md', '.pdf', '.txt']",
+              "filename": "malware.exe",
+              "status": "error"
+            }
+          ],
+          "quarantine_count": 0,
+          "usage": {
+            "calls": 0,
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "PDF corrompu (contenu non-PDF avec extension .pdf)",
+      "passed": true,
+      "details": "status côté doc=error",
+      "evidence": {
+        "body": {
+          "corpus_id": "CORPUS-a2b0c91c",
+          "documents": [
+            {
+              "error": "Échec du parsing de 'fake.pdf': Stream has ended unexpectedly",
+              "filename": "fake.pdf",
+              "status": "error"
+            }
+          ],
+          "quarantine_count": 0,
+          "usage": {
+            "calls": 0,
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Lot mixte : 1 doc invalide + 1 doc valide → le valide n'est pas perdu",
+      "passed": true,
+      "details": "statuses={'bad.exe': 'error', 'good.txt': 'clean'}",
+      "evidence": {
+        "body": {
+          "corpus_id": "CORPUS-b05c1ea4",
+          "documents": [
+            {
+              "error": "Type de fichier non supporté : '.exe'. Supportés : ['.docx', '.json', '.md', '.pdf', '.txt']",
+              "filename": "bad.exe",
+              "status": "error"
+            },
+            {
+              "doc_id": "DOC-5868c1de",
+              "filename": "good.txt",
+              "status": "clean"
+            }
+          ],
+          "quarantine_count": 0,
+          "usage": {
+            "calls": 1,
+            "cost_usd": 0.000717,
+            "input_tokens": 547,
+            "output_tokens": 34
+          }
+        }
+      }
+    },
+    {
+      "name": "Corps JSON malformé sur /query",
+      "passed": true,
+      "details": "status=400",
+      "evidence": {
+        "body": "{\"error\":\"Le champ 'corpus_id' est requis.\"}\n"
+      }
+    },
+    {
+      "name": "Question sans rapport avec le corpus → aveu, pas d'invention",
+      "passed": true,
+      "details": "admits_not_knowing=True citations=0",
+      "evidence": {
+        "answer": "je n'ai pas trouvé d'information sur la capitale de la mongolie dans le corpus fourni. les documents disponibles ne contiennent pas de passages pertinents répondant à cette question."
+      }
+    },
+    {
+      "name": "Coût des appels LLM exposé dans les réponses (bonus)",
+      "passed": true,
+      "details": "usage={'calls': 1, 'cost_usd': 9.4e-05, 'input_tokens': 74, 'output_tokens': 4}",
+      "evidence": {
+        "usage": {
+          "calls": 1,
+          "cost_usd": 9.4e-05,
+          "input_tokens": 74,
+          "output_tokens": 4
+        }
+      }
+    },
+    {
+      "name": "Aucune requête de ce run n'a produit d'erreur non journalisée (500 muet)",
+      "passed": true,
+      "details": "OK",
+      "evidence": {}
+    }
+  ]
+}

@@ -50,4 +50,6 @@ report_test.json
 
 # Données locales (backend)
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
