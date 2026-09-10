@@ -92,7 +92,7 @@ Note : une connexion SQLite ouverte survit à la suppression de son fichier (le 
 
 - Aucune gestion de l'historique de conversation sur `/api/ask` (chaque message est indépendant).
 - Recherche dans le corpus par recouvrement de mots-clés (pas d'embeddings/BM25 pour l'instant).
-- Pas de tests automatisés côté backend à ce stade.
+- Tests automatisés côté backend : `scripts/test_agent.py` (détection, boucle agent, cas d'échec, prompts adversariaux) et `scripts/eval_resilience.py` (10 scénarios de panne, palier 4).
 - Déploiement : pas encore fait (bonus optionnel).
 
 ## Documentation du projet

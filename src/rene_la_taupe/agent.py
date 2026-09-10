@@ -6,12 +6,13 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import anthropic
 
-from rene_la_taupe.prompts import ANSWER_GENERATION_PROMPT, SYSTEM_PROMPT
+from rene_la_taupe.prompts import SYSTEM_PROMPT
 from rene_la_taupe.schemas import CitedAnswer, DocHit, Report
 from rene_la_taupe.tools import (
     CorpusStore,
