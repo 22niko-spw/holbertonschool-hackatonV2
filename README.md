@@ -28,9 +28,9 @@ Ouvrir [http://localhost:5000](http://localhost:5000) : dépose des fichiers, po
 
 Routes exposées par `app.py` :
 
-- `POST /api/ask` : question libre → réponse LLM directe (socle palier 2).
+- `POST /api/ask` : question libre → réponse LLM directe + `usage` (tokens, appels, durée, coût $ estimé).
 - `POST /ingest` : upload multipart de documents (PDF/DOCX/TXT/MD/JSON) → parsing, normalisation Unicode, découpage en chunks, criblage via le détecteur d'injection, persistance (SQLite) → retourne un `corpus_id`.
-- `POST /query` : `corpus_id` + question → exécute l'agent sur le corpus sain, retourne le `Report` complet (réponse citée + quarantaine).
+- `POST /query` : `corpus_id` + question → exécute l'agent sur le corpus sain, retourne le `Report` complet (réponse citée + `confidence` + quarantaine) + `usage`. Confiance `0.0` + 0 citation = aveu explicite, jamais d'invention (voir [ROBUSTESSE.md](ROBUSTESSE.md)).
 - `GET /report/<report_id>` : relit un rapport déjà généré.
 - `GET /health` : état des dépendances (base, clé API, journal). 503 dès qu'une dépendance manque.
 - `POST /admin/shutdown` : interrupteur d'arrêt (voir ci-dessous).

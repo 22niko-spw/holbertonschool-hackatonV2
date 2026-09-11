@@ -39,6 +39,11 @@ class ReportStore(ABC):
     def save_report(self, report: Report) -> Report:
         pass
 
+    @abstractmethod
+    def update_question(self, report_id: str, question: str) -> None:
+        """Réécrit la question après coup (le rapport est persisté avant)."""
+        pass
+
 
 class InMemoryCorpusStore(CorpusStore):
     """Implémentation temporaire en mémoire pour tests standalone."""
@@ -107,6 +112,11 @@ class InMemoryReportStore(ReportStore):
         self._reports[report.report_id] = report
         return report
 
+    def update_question(self, report_id: str, question: str) -> None:
+        report = self._reports.get(report_id)
+        if report is not None:
+            report.question = question
+
 
 # ─── Outils ───
 
@@ -134,6 +144,9 @@ def cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer:
     """
     Attache les citations aux segments de la réponse.
     Version simplifiée : associe chaque hit à une citation span approximative.
+    La confiance reflète la force probante de la récupération (score moyen
+    des hits) : 0.0 sans passage pertinent, pour que l'UI n'affiche jamais
+    une réponse inventée avec assurance.
     """
     from rene_la_taupe.schemas import Citation
 
@@ -149,7 +162,8 @@ def cite_sources(answer: str, hits: list[DocHit]) -> CitedAnswer:
             span_start=span_start,
             span_end=span_end,
         ))
-    return CitedAnswer(answer=answer, citations=citations)
+    confidence = sum(h.score for h in hits) / len(hits) if hits else 0.0
+    return CitedAnswer(answer=answer, citations=citations, confidence=min(1.0, max(0.0, confidence)))
 
 
 def finalize_report(
@@ -157,8 +171,14 @@ def finalize_report(
     answer: CitedAnswer,
     quarantine: list[QuarantineEntry],
     store: ReportStore,
+    persist: bool = True,
 ) -> Report:
-    """Écrit le rapport final en BDD — SEUL outil à effet de bord."""
+    """Construit le rapport final — SEUL outil à effet de bord (si persist).
+
+    persist=False : rapport construit mais NON écrit (outil finalize_report
+    coupé) — la route le renvoie quand même, il ne sera juste pas relisible
+    via GET /report/<id>.
+    """
     report = Report(
         report_id=str(uuid.uuid4()),
         corpus_id=corpus_id,
@@ -167,4 +187,6 @@ def finalize_report(
         quarantine=quarantine,
         created_at=datetime.utcnow().isoformat() + "Z",
     )
-    return store.save_report(report)
+    if persist:
+        return store.save_report(report)
+    return report

@@ -13,7 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from rene_la_taupe.prompts import DETECTION_SYSTEM_PROMPT
-from rene_la_taupe.schemas import QuarantineEntry
+from rene_la_taupe.schemas import CostUsage, QuarantineEntry
 from rene_la_taupe.security_log import log_error
 
 TENACITY_AVAILABLE = find_spec("tenacity") is not None
@@ -141,8 +141,8 @@ class InjectionDetector:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
 
-    def _call_llm_with_retry(self, messages: list[dict]) -> str:
-        """Appel LLM avec retry (timeout géré par le client)."""
+    def _call_llm_with_retry(self, messages: list[dict]) -> tuple[str, int, Any | None]:
+        """Appel LLM avec retry. Retourne (contenu, tentatives, usage API ou None)."""
         last_error = None
 
         for attempt in range(self.max_retries + 1):
@@ -154,7 +154,7 @@ class InjectionDetector:
                     messages=messages,
                 )
                 content = response.content[0].text if response.content else "{}"
-                return content
+                return content, attempt + 1, getattr(response, "usage", None)
             except Exception as e:
                 last_error = e
                 logger.warning(f"Tentative {attempt + 1}/{self.max_retries + 1} échouée: {e}")
@@ -163,9 +163,11 @@ class InjectionDetector:
 
         raise last_error
 
-    def analyze(self, doc_id: str, text: str) -> DetectionResult:
+    def analyze(self, doc_id: str, text: str, stats: CostUsage | None = None) -> DetectionResult:
         """
         Analyse un document unique et retourne le résultat de détection.
+        Si stats est fourni, les tokens/appels LLM y sont accumulés (objet
+        appartenant à l'appelant : sûr en concurrence).
         """
         # Tronquer si trop long (garder début + milieu + fin pour couverture)
         max_chars = 8000
@@ -178,7 +180,12 @@ class InjectionDetector:
         ]
 
         try:
-            content = self._call_llm_with_retry(messages)
+            content, attempts, usage = self._call_llm_with_retry(messages)
+            if stats is not None:
+                stats.llm_calls += attempts
+                if usage is not None:
+                    stats.input_tokens += getattr(usage, "input_tokens", 0) or 0
+                    stats.output_tokens += getattr(usage, "output_tokens", 0) or 0
             content = content.strip()
             if content.startswith("```"):
                 lines = content.split("\n")

@@ -13,7 +13,7 @@ from typing import Any
 import anthropic
 
 from rene_la_taupe.prompts import SYSTEM_PROMPT
-from rene_la_taupe.schemas import CitedAnswer, DocHit, Report
+from rene_la_taupe.schemas import CitedAnswer, CostUsage, DocHit, Report
 from rene_la_taupe.tools import (
     CorpusStore,
     ReportStore,
@@ -214,6 +214,8 @@ class ReneLaTaupeAgent:
         self.config = config or AgentConfig()
         self.trace_callback = trace_callback
         self._traces: list[ToolCallTrace] = []
+        self._usage: CostUsage = CostUsage()
+        self._collected_hits: list[DocHit] = []
 
     def run(self, corpus_id: str, question: str) -> Report:
         """
@@ -222,16 +224,18 @@ class ReneLaTaupeAgent:
         """
         logger.info(f"Démarrage agent corpus={corpus_id} question={question[:80]}")
         self._traces.clear()
+        self._usage = CostUsage()
+        self._collected_hits.clear()
 
         messages: list[dict] = [
             {"role": "user", "content": f"Corpus ID: {corpus_id}\nQuestion: {question}"}
         ]
 
         system_prompt = SYSTEM_PROMPT
-        collected_hits: list[DocHit] = []
         final_answer: str | None = None
         cited_answer: CitedAnswer | None = None
         quarantine: list = []
+        loop_broken = False
 
         if self.config.enabled_tools is None:
             active_tools = TOOL_DEFINITIONS
@@ -254,6 +258,12 @@ class ReneLaTaupeAgent:
             except anthropic.APIError as e:
                 logger.error(f"Erreur API LLM tour {turn}: {e}")
                 raise AgentLoopError(f"Erreur appel LLM: {e}") from e
+
+            api_usage = getattr(response, "usage", None)
+            if api_usage is not None:
+                self._usage.input_tokens += getattr(api_usage, "input_tokens", 0) or 0
+                self._usage.output_tokens += getattr(api_usage, "output_tokens", 0) or 0
+            self._usage.llm_calls += 1
 
             # Traiter la réponse
             tool_uses = [block for block in response.content if block.type == "tool_use"]
@@ -299,7 +309,7 @@ class ReneLaTaupeAgent:
             for tool_use, trace in zip(tool_uses, self._traces[-len(tool_results):]):
                 raw = getattr(trace, '_raw_result', None)
                 if tool_use.name == "search_corpus" and raw:
-                    collected_hits.extend(raw)
+                    self._collected_hits.extend(raw)
                 elif tool_use.name == "cite_sources" and raw:
                     cited_answer = raw
                 elif tool_use.name == "list_quarantine" and raw:
@@ -307,30 +317,129 @@ class ReneLaTaupeAgent:
                 elif tool_use.name == "finalize_report" and raw:
                     logger.info(f"Rapport finalisé: {raw.report_id}")
                     raw.question = question
+                    if not self._tool_enabled("cite_sources"):
+                        # Outil coupé : le modèle ne peut pas l'appeler, mais il
+                        # peut glisser des citations dans finalize_report — on
+                        # les retire pour que la coupure soit effective.
+                        raw.answer = CitedAnswer(answer=raw.answer.answer, citations=[], confidence=0.0)
+                    else:
+                        raw.answer.confidence = self._verified_confidence(raw.answer, self._collected_hits)
+                    if not self._tool_enabled("list_quarantine"):
+                        raw.quarantine = []
+                    self._persist_question(raw.report_id, question)
                     return raw
 
-        # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes
-        if cited_answer is None and final_answer:
-            cited_answer = cite_sources(final_answer, collected_hits)
+            # Disjoncteur : 3 échecs identiques consécutifs = boucle enlisée,
+            # inutile de brûler les tours restants (vu : 9× KeyError 'hits').
+            recent = self._traces[-3:]
+            if (
+                len(recent) == 3
+                and all(t.error is not None for t in recent)
+                and len({(t.tool_name, t.error) for t in recent}) == 1
+            ):
+                logger.warning(
+                    f"Disjoncteur : 3 échecs identiques "
+                    f"({recent[0].tool_name}: {recent[0].error}) — arrêt de la boucle."
+                )
+                loop_broken = True
+                break
+
+        # Si on sort de la boucle sans finalize_report, on finalise nous-mêmes.
+        # Le texte distingue les deux situations : aucune preuve trouvée VS
+        # preuves trouvées mais inexploitées (disjoncteur) — affirmer « rien
+        # trouvé » dans le second cas serait un mensonge (cas observé).
+        if cited_answer is not None:
+            cited_answer.confidence = self._verified_confidence(cited_answer, self._collected_hits)
+        if cited_answer is None and final_answer and self._collected_hits:
+            # Texte spontané du modèle ADOSSÉ à des passages retrouvés.
+            if self._tool_enabled("cite_sources"):
+                cited_answer = cite_sources(final_answer, self._collected_hits)
+            else:
+                # Outil coupé : réponse sans citations vérifiables, confiance
+                # nulle. Le badge UI signalera l'absence de sources.
+                cited_answer = CitedAnswer(answer=final_answer, citations=[], confidence=0.0)
         elif cited_answer is None:
-            cited_answer = cite_sources(
-                "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus.",
-                []
-            )
+            if loop_broken and self._collected_hits:
+                cited_answer = cite_sources(
+                    "J'ai retrouvé des passages potentiellement pertinents dans le corpus sain, "
+                    "mais je n'ai pas réussi à les exploiter pour construire une réponse citée. "
+                    "Relancez la question : un nouvel essai emprunte un autre chemin.",
+                    [],
+                )
+            else:
+                cited_answer = cite_sources(
+                    "Je n'ai pas trouvé d'information pertinente dans les documents sains du corpus.",
+                    [],
+                )
 
         if not quarantine:
-            quarantine = list_quarantine(corpus_id, self.corpus_store)
+            if self._tool_enabled("list_quarantine"):
+                quarantine = list_quarantine(corpus_id, self.corpus_store)
+            else:
+                quarantine = []
 
-        report = finalize_report(corpus_id, cited_answer, quarantine, self.report_store)
+        report = finalize_report(
+            corpus_id,
+            cited_answer,
+            quarantine,
+            self.report_store,
+            persist=self._tool_enabled("finalize_report"),
+        )
         report.question = question
+        if self._tool_enabled("finalize_report"):
+            self._persist_question(report.report_id, question)
         logger.info(f"Rapport finalisé (fallback): {report.report_id}")
         return report
+
+    def _persist_question(self, report_id: str, question: str) -> None:
+        """Réécrit la question dans le rapport persisté (best-effort).
+
+        finalize_report sauvegarde AVANT que l'appelant attache la question :
+        sans cette réécriture, la colonne reste vide et un audit ne peut plus
+        relier rapport ↔ question. Un échec ici ne doit pas invalider un
+        rapport par ailleurs complet : on journalise et on continue.
+        """
+        try:
+            self.report_store.update_question(report_id, question)
+        except Exception:
+            logger.warning(f"Question non persistée pour {report_id}", exc_info=True)
+
+    def _tool_enabled(self, name: str) -> bool:
+        """Un outil coupé ne doit ni être proposé au modèle NI contribuer au rapport.
+
+        Sans ce garde, le repli de fin de boucle réintroduisait cite_sources,
+        list_quarantine et finalize_report même coupés (citations et quarantaine
+        affichées malgré l'interrupteur).
+        """
+        enabled = self.config.enabled_tools
+        return enabled is None or name in enabled
+
+    @staticmethod
+    def _verified_confidence(cited: CitedAnswer, hits: list[DocHit]) -> float:
+        """Recalcule la confiance depuis les scores de recherche observés.
+
+        Le LLM fournit les citations (et parfois leurs scores) : on ne le croit
+        pas sur parole. Seuls les chunks retournés par search_corpus comptent ;
+        un chunk cité mais jamais retrouvé vaut 0 (extrait possiblement inventé).
+        """
+        if not cited.citations:
+            return 0.0
+        observed = {(h.doc_id, h.chunk_id): h.score for h in hits}
+        scores = [observed.get((c.doc_id, c.chunk_id), 0.0) for c in cited.citations]
+        return min(1.0, max(0.0, sum(scores) / len(scores)))
 
     def _execute_tool(self, tool_use: anthropic.types.ToolUseBlock, turn: int, corpus_id: str) -> ToolCallTrace:
         """Exécute un outil avec traçage et gestion d'erreurs."""
         tool_name = tool_use.name
         args = tool_use.input
         start_time = time.perf_counter()
+
+        if tool_name == "cite_sources" and not args.get("hits") and self._collected_hits:
+            # Réparation : le LLM omet souvent le paramètre hits (KeyError 'hits'
+            # en boucle jusqu'à épuisement des tours, cas observé). Le serveur
+            # connaît les passages retrouvés : on les injecte au lieu d'échouer.
+            args = {**args, "hits": [h.model_dump() for h in self._collected_hits]}
+            logger.info(f"[TOOL REPAIR] tour={turn} tool=cite_sources hits injectés ({len(self._collected_hits)})")
 
         trace = ToolCallTrace(
             turn=turn,
@@ -341,6 +450,8 @@ class ReneLaTaupeAgent:
         logger.info(f"[TOOL CALL] tour={turn} tool={tool_name} args={json.dumps(args, ensure_ascii=False)}")
 
         try:
+            if not self._tool_enabled(tool_name):
+                raise ToolExecutionError(tool_name, "Outil désactivé par la configuration (enabled_tools)")
             impl = TOOL_IMPL.get(tool_name)
             if impl is None:
                 raise ToolExecutionError(tool_name, f"Outil inconnu: {tool_name}")
@@ -379,6 +490,19 @@ class ReneLaTaupeAgent:
     def get_traces(self) -> list[ToolCallTrace]:
         """Retourne la liste complète des traces d'appels d'outils."""
         return self._traces.copy()
+
+    @property
+    def last_usage(self) -> CostUsage:
+        """Coût LLM du dernier run (tokens/appels, sans la durée).
+
+        Même motif que get_traces() : la durée est mesurée par l'appelant
+        (route HTTP), qui remplit duration_ms avant de répondre.
+        """
+        return CostUsage(
+            input_tokens=self._usage.input_tokens,
+            output_tokens=self._usage.output_tokens,
+            llm_calls=self._usage.llm_calls,
+        )
 
 
 def create_test_agent() -> ReneLaTaupeAgent:

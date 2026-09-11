@@ -385,6 +385,19 @@ class SqliteReportStore(ReportStore):
             raise
 
     @_with_retry
+    def update_question(self, report_id: str, question: str) -> None:
+        conn = self._db.connection()
+        try:
+            with conn:
+                conn.execute(
+                    "UPDATE reports SET question = ? WHERE report_id = ?",
+                    (question, report_id),
+                )
+        except sqlite3.Error as e:
+            log_error("db.update_question_failed", error_type=type(e).__name__, error=str(e), report_id=report_id)
+            raise
+
+    @_with_retry
     def get_report(self, report_id: str) -> Report | None:
         conn = self._db.connection()
         try:
